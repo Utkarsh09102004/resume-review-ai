@@ -6,7 +6,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN useradd -m compiler
+RUN useradd -m -u 1001 compiler
 
 WORKDIR /app
 

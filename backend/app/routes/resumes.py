@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.resume import Resume
-from app.schemas.resume import ResumeCreate, ResumeResponse, ResumeUpdate
+from app.schemas.resume import DEFAULT_LATEX_TEMPLATE, ResumeCreate, ResumeResponse, ResumeUpdate
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 
@@ -28,9 +28,12 @@ async def create_resume(
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> Resume:
-    latex_source = body.latex_source
-
     if body.parent_id is not None:
+        if body.latex_source is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Cannot provide latex_source when forking from a parent resume",
+            )
         parent = await session.get(Resume, body.parent_id)
         if parent is None or parent.user_id != user_id:
             raise HTTPException(
@@ -38,6 +41,8 @@ async def create_resume(
                 detail="Parent resume not found",
             )
         latex_source = parent.latex_source
+    else:
+        latex_source = body.latex_source or DEFAULT_LATEX_TEMPLATE
 
     resume = Resume(
         user_id=user_id,

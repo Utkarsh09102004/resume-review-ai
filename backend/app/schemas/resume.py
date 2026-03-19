@@ -30,7 +30,7 @@ email@example.com \textbar\ (555) 123-4567 \textbar\ City, State
 class ResumeCreate(BaseModel):
     title: str = Field(..., max_length=255)
     parent_id: uuid.UUID | None = None
-    latex_source: str = Field(default=DEFAULT_LATEX_TEMPLATE, max_length=500_000)
+    latex_source: str | None = Field(default=None, max_length=500_000)
 
 
 class ResumeUpdate(BaseModel):

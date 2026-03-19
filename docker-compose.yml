@@ -41,7 +41,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://resumeforge:${DB_PASSWORD:-devpassword}@postgres:5432/resumeforge
       TEXLIVE_URL: http://texlive:3001
       AUTH_ENABLED: ${AUTH_ENABLED:-false}
-      LOGTO_JWKS_URL: ${LOGTO_JWKS_URL:-http://localhost:3001/oidc/jwks}
+      LOGTO_JWKS_URL: ${LOGTO_JWKS_URL:-}
+      LOGTO_APP_ID: ${LOGTO_APP_ID:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     depends_on:
       postgres:
         condition: service_healthy

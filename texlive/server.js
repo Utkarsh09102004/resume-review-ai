@@ -25,9 +25,9 @@ app.post("/compile", async (req, res) => {
   const jobDir = path.join(COMPILE_DIR, jobId);
 
   try {
-    fs.mkdirSync(jobDir, { recursive: true });
+    await fs.promises.mkdir(jobDir, { recursive: true });
     const texFile = path.join(jobDir, "input.tex");
-    fs.writeFileSync(texFile, latex);
+    await fs.promises.writeFile(texFile, latex);
 
     // Run xelatex twice for references/TOC
     for (let pass = 0; pass < 2; pass++) {
@@ -45,7 +45,9 @@ app.post("/compile", async (req, res) => {
     }
 
     const pdfPath = path.join(jobDir, "input.pdf");
-    if (!fs.existsSync(pdfPath)) {
+    try {
+      await fs.promises.access(pdfPath);
+    } catch {
       const duration = Date.now() - start;
       logCompilation({ duration_ms: duration, success: false, error: "PDF not generated" });
       return res.status(400).json({
@@ -54,7 +56,7 @@ app.post("/compile", async (req, res) => {
       });
     }
 
-    const pdfBytes = fs.readFileSync(pdfPath);
+    const pdfBytes = await fs.promises.readFile(pdfPath);
     const duration = Date.now() - start;
     logCompilation({ duration_ms: duration, success: true });
 
@@ -68,7 +70,9 @@ app.post("/compile", async (req, res) => {
       message: err.message,
     });
   } finally {
-    fs.rm(jobDir, { recursive: true, force: true }, () => {});
+    fs.rm(jobDir, { recursive: true, force: true }, (err) => {
+      if (err) console.error(`Cleanup failed for ${jobDir}:`, err.message);
+    });
   }
 });
 

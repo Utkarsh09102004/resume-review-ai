@@ -21,7 +21,7 @@ async def compile_latex(body: CompileRequest, _user_id: str = Depends(get_curren
                 f"{settings.TEXLIVE_URL}/compile",
                 json={"latex": body.latex},
             )
-    except httpx.ConnectError as err:
+    except httpx.RequestError as err:
         raise HTTPException(
             status_code=503,
             detail="LaTeX compilation service unavailable",

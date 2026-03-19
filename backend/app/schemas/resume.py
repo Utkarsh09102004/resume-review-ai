@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_LATEX_TEMPLATE = r"""\documentclass[a4paper,10pt]{article}
 \usepackage[margin=1in]{geometry}
@@ -28,14 +28,14 @@ email@example.com \textbar\ (555) 123-4567 \textbar\ City, State
 
 
 class ResumeCreate(BaseModel):
-    title: str
+    title: str = Field(..., max_length=255)
     parent_id: uuid.UUID | None = None
-    latex_source: str = DEFAULT_LATEX_TEMPLATE
+    latex_source: str = Field(default=DEFAULT_LATEX_TEMPLATE, max_length=500_000)
 
 
 class ResumeUpdate(BaseModel):
-    title: str | None = None
-    latex_source: str | None = None
+    title: str | None = Field(default=None, max_length=255)
+    latex_source: str | None = Field(default=None, max_length=500_000)
 
 
 class ResumeResponse(BaseModel):

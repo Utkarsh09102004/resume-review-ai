@@ -1,3 +1,11 @@
+---
+title: Development Setup Guide
+category: guide
+status: current
+relates_to: [docs/specs/architecture.md, docs/runbooks/deployment.md]
+last_verified: 2026-03-20
+---
+
 # Development Setup Guide
 
 ## Prerequisites

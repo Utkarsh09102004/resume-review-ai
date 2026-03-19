@@ -32,9 +32,12 @@ Visit http://localhost:3000.
 
 ## Documentation
 
-- **[Setup Guide](docs/setup.md)** — full dev environment setup, port map, troubleshooting
-- **[Architecture](docs/architecture.md)** — system design, service responsibilities, tech stack, auth flow
-- **[Design System](docs/design-system.md)** — "Ink & Amber" theme, colors, typography, Tailwind v4 usage
+See **[docs/INDEX.md](docs/INDEX.md)** for the full documentation index, including:
+
+- **Guides** — setup, workflows
+- **Specs** — architecture, API contract, data model, design system
+- **Decisions** — ADRs for every major technical choice
+- **Runbooks** — deployment, operations
 
 ## Production
 

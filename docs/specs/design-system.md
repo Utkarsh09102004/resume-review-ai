@@ -1,3 +1,11 @@
+---
+title: "Design System: Ink & Amber"
+category: spec
+status: current
+relates_to: [frontend/app/globals.css]
+last_verified: 2026-03-20
+---
+
 # Design System: "Ink & Amber"
 
 Dark, warm, refined developer-tool aesthetic.

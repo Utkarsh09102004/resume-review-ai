@@ -1,3 +1,11 @@
+---
+title: Architecture
+category: spec
+status: current
+relates_to: [docs/specs/api-contract.md, docs/specs/data-model.md, "docs/decisions/"]
+last_verified: 2026-03-20
+---
+
 # Architecture
 
 ## System Design

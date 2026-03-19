@@ -75,7 +75,7 @@ npm run dev
 ```
 
 - App at http://localhost:3000
-- Uses Next.js 15 with Turbopack for fast HMR
+- Uses Next.js 16 with Turbopack for fast HMR
 
 ## Port Map
 

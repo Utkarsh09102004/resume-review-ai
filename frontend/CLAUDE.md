@@ -2,7 +2,7 @@
 
 ## Stack
 
-- Next.js 15 (App Router, TypeScript strict)
+- Next.js 16 (App Router, TypeScript strict)
 - Tailwind v4 (CSS-first, no tailwind.config.ts)
 - Geist Sans (UI), JetBrains Mono (editor)
 

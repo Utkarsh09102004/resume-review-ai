@@ -76,7 +76,7 @@ last_verified: 2026-03-20
 
 | Component       | Technology                          |
 |-----------------|-------------------------------------|
-| Frontend        | Next.js 15, TypeScript, Tailwind v4 |
+| Frontend        | Next.js 16, TypeScript, Tailwind v4 |
 | Backend         | FastAPI, Python 3.11, SQLAlchemy 2  |
 | Database        | PostgreSQL 16                       |
 | LaTeX Compiler  | TeXLive (xelatex), Node.js Express  |

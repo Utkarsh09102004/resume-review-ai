@@ -4,7 +4,7 @@ AI-powered LaTeX resume editor with live PDF preview.
 
 ## Tech Stack
 
-- **Frontend:** Next.js 15 (TypeScript, Tailwind v4)
+- **Frontend:** Next.js 16 (TypeScript, Tailwind v4)
 - **Backend:** FastAPI (Python 3.11, SQLAlchemy, async)
 - **Database:** PostgreSQL 16
 - **LaTeX:** TeXLive (xelatex) in Docker

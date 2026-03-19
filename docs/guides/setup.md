@@ -77,6 +77,44 @@ npm run dev
 - App at http://localhost:3000
 - Uses Next.js 16 with Turbopack for fast HMR
 
+## Code Quality (Lint & Type Check)
+
+All checks must pass before committing. Run from the repo root:
+
+```bash
+make check       # run everything: ruff + eslint + mypy + tsc
+make lint        # linting only (ruff + eslint)
+make typecheck   # type checking only (mypy + tsc)
+make fmt         # auto-format backend (ruff format + fix)
+```
+
+### Backend (Python)
+
+| Tool | Purpose | Config |
+|------|---------|--------|
+| **ruff** | Linting (E/W/F/I/B/UP/RUF rules) + formatting | `backend/pyproject.toml` `[tool.ruff]` |
+| **mypy** | Static type checking (strict mode, pydantic plugin) | `backend/pyproject.toml` `[tool.mypy]` |
+
+```bash
+cd backend
+uv run ruff check .       # lint
+uv run ruff format .      # auto-format
+uv run mypy app/          # type check
+```
+
+### Frontend (TypeScript)
+
+| Tool | Purpose | Config |
+|------|---------|--------|
+| **eslint** | Linting (Next.js core-web-vitals + typescript) | `frontend/eslint.config.mjs` |
+| **tsc** | Type checking (strict mode) | `frontend/tsconfig.json` |
+
+```bash
+cd frontend
+npm run lint              # eslint
+npm run typecheck         # tsc --noEmit
+```
+
 ## Port Map
 
 | Service    | Port | Notes                                    |

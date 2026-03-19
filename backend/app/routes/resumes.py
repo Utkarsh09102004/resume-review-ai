@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -16,12 +17,8 @@ router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 async def list_resumes(
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
-    result = await session.execute(
-        select(Resume)
-        .where(Resume.user_id == user_id)
-        .order_by(Resume.updated_at.desc())
-    )
+) -> Sequence[Resume]:
+    result = await session.execute(select(Resume).where(Resume.user_id == user_id).order_by(Resume.updated_at.desc()))
     return result.scalars().all()
 
 
@@ -30,7 +27,7 @@ async def create_resume(
     body: ResumeCreate,
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> Resume:
     latex_source = body.latex_source
 
     if body.parent_id is not None:
@@ -59,7 +56,7 @@ async def get_resume(
     resume_id: uuid.UUID,
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> Resume:
     resume = await session.get(Resume, resume_id)
     if resume is None or resume.user_id != user_id:
         raise HTTPException(
@@ -75,7 +72,7 @@ async def update_resume(
     body: ResumeUpdate,
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> Resume:
     resume = await session.get(Resume, resume_id)
     if resume is None or resume.user_id != user_id:
         raise HTTPException(
@@ -97,7 +94,7 @@ async def delete_resume(
     resume_id: uuid.UUID,
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> None:
     resume = await session.get(Resume, resume_id)
     if resume is None or resume.user_id != user_id:
         raise HTTPException(

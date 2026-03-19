@@ -19,5 +19,5 @@ app.include_router(compile.router)
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     return {"status": "ok"}

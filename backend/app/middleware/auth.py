@@ -1,4 +1,5 @@
 import time
+from typing import Any
 
 import httpx
 from fastapi import Depends, HTTPException, status
@@ -9,12 +10,12 @@ from app.config import settings
 
 security = HTTPBearer(auto_error=False)
 
-_jwks_cache: dict | None = None
+_jwks_cache: dict[str, Any] | None = None
 _jwks_cache_time: float = 0
 _JWKS_CACHE_TTL: int = 3600  # 1 hour
 
 
-async def _get_jwks(force_refresh: bool = False) -> dict:
+async def _get_jwks(force_refresh: bool = False) -> dict[str, Any]:
     global _jwks_cache, _jwks_cache_time
     now = time.time()
     if _jwks_cache is None or force_refresh or (now - _jwks_cache_time) > _JWKS_CACHE_TTL:
@@ -80,8 +81,8 @@ async def get_current_user(
                 detail="Token missing sub claim",
             )
         return user_id
-    except JWTError:
+    except JWTError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
-        )
+        ) from err

@@ -1,19 +1,20 @@
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.middleware.auth import get_current_user
 
 router = APIRouter(tags=["compile"])
 
 
 class CompileRequest(BaseModel):
-    latex: str
+    latex: str = Field(..., max_length=500_000)
 
 
 @router.post("/api/compile")
-async def compile_latex(body: CompileRequest):
+async def compile_latex(body: CompileRequest, _user_id: str = Depends(get_current_user)):
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(

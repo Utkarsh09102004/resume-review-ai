@@ -1,0 +1,42 @@
+import httpx
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel
+
+from app.config import settings
+
+router = APIRouter(tags=["compile"])
+
+
+class CompileRequest(BaseModel):
+    latex: str
+
+
+@router.post("/api/compile")
+async def compile_latex(body: CompileRequest):
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"{settings.TEXLIVE_URL}/compile",
+                json={"latex": body.latex},
+            )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="LaTeX compilation service unavailable",
+        )
+
+    if resp.status_code == 200 and "application/pdf" in resp.headers.get(
+        "content-type", ""
+    ):
+        return Response(
+            content=resp.content,
+            media_type="application/pdf",
+        )
+
+    try:
+        error_body = resp.json()
+    except Exception:
+        error_body = {"detail": resp.text}
+
+    raise HTTPException(status_code=resp.status_code, detail=error_body)

@@ -13,6 +13,14 @@
 - Frontend: `eslint` for linting, `tsc --noEmit` for type checking.
 - Quick-fix formatting: `make fmt` (auto-formats backend with ruff).
 
+## Testing
+
+- Run `make test` to run both backend and frontend test suites.
+- Backend: `pytest` with async SQLite in-memory DB. Tests in `backend/tests/`. Run: `make test-backend`.
+- Frontend: `vitest` with React Testing Library. Tests in `frontend/tests/`. Run: `make test-frontend`.
+- Coverage: `make test-cov` for backend coverage report.
+- Write tests for all new endpoints, components, and utilities.
+
 ## Git & GitHub
 
 - Always use `gh-personal` (not `gh`) for all GitHub CLI operations in this codebase.

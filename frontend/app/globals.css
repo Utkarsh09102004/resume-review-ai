@@ -35,3 +35,80 @@ body {
   background-color: var(--color-bg-deep);
   color: var(--color-text-primary);
 }
+
+/* Keyframe animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes expandDown {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 150px;
+    opacity: 1;
+  }
+}
+
+@keyframes collapseUp {
+  from {
+    max-height: 150px;
+    opacity: 1;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+
+/* Editor font class */
+.font-editor {
+  font-family: var(--font-editor), monospace;
+}
+
+/* CodeMirror theme overrides */
+.cm-editor {
+  height: 100%;
+  font-family: var(--font-editor), monospace;
+}
+
+.cm-editor .cm-scroller {
+  font-family: var(--font-editor), monospace;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}

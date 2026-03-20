@@ -20,8 +20,8 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
     async function renderPdf() {
       const pdfjsLib = await import("pdfjs-dist");
 
-      // Set up the worker
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      // Use local worker from public/ (CDN doesn't have v5.x builds)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
       if (!pdfData) return;
       const loadingTask = pdfjsLib.getDocument({ data: pdfData.slice() });

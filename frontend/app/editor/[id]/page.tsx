@@ -1,117 +1,225 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, use } from "react";
+import { useRouter } from "next/navigation";
 import Toolbar from "@/components/Toolbar";
 import StatusPill from "@/components/StatusPill";
 import SplitPane from "@/components/editor/SplitPane";
 import EditorPanel from "@/components/editor/EditorPanel";
 import PreviewPanel from "@/components/editor/PreviewPanel";
 import ErrorPanel from "@/components/editor/ErrorPanel";
+import { useResumeEditor } from "@/hooks/useResumeEditor";
+import { useCompiler } from "@/hooks/useCompiler";
+import api from "@/lib/api";
 
-// Mock LaTeX source
-const MOCK_LATEX = `\\documentclass[11pt,a4paper]{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage[T1]{fontenc}
-\\usepackage{geometry}
-\\geometry{left=0.75in,right=0.75in,top=0.6in,bottom=0.6in}
-\\usepackage{enumitem}
-\\usepackage{hyperref}
-\\usepackage{titlesec}
+export default function EditorPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const router = useRouter();
+  const { resume, parentResume, loading, notFound, error, isSaving, save } =
+    useResumeEditor(id);
 
-\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
-\\titlespacing*{\\section}{0pt}{8pt}{4pt}
-
-\\pagestyle{empty}
-
-\\begin{document}
-
-\\begin{center}
-  {\\Huge\\bfseries Jane Doe} \\\\[4pt]
-  \\href{mailto:jane@example.com}{jane@example.com} \\;|\\;
-  (555) 123-4567 \\;|\\;
-  \\href{https://github.com/janedoe}{github.com/janedoe} \\;|\\;
-  San Francisco, CA
-\\end{center}
-
-\\section{Experience}
-
-\\textbf{Senior Software Engineer} \\hfill \\textit{2024 -- Present} \\\\
-\\textit{Acme Corp} \\hfill San Francisco, CA
-\\begin{itemize}[nosep,leftmargin=*]
-  \\item Led migration of monolithic backend to microservices, reducing deploy times by 60\\%
-  \\item Designed and implemented real-time event processing pipeline handling 50k events/sec
-  \\item Mentored 4 junior engineers through structured 1:1s and code review sessions
-\\end{itemize}
-
-\\section{Education}
-
-\\textbf{B.S. Computer Science} \\hfill \\textit{2016 -- 2020} \\\\
-\\textit{Stanford University} \\hfill Stanford, CA
-
-\\section{Skills}
-
-\\textbf{Languages:} TypeScript, Python, Go, Rust \\\\
-\\textbf{Frameworks:} React, Next.js, FastAPI, gRPC \\\\
-\\textbf{Tools:} Docker, Kubernetes, Terraform, PostgreSQL, Redis
-
-\\end{document}
-`;
-
-// Mock errors
-const MOCK_ERRORS = [
-  { line: 12, message: "Undefined control sequence \\titlerule" },
-  { line: 28, message: "Missing $ inserted" },
-];
-
-export default function EditorPage() {
-  const [latex, setLatex] = useState(MOCK_LATEX);
+  const [latex, setLatex] = useState<string | null>(null);
   const [errorsExpanded, setErrorsExpanded] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Mock status — toggle to see different states
-  const [status] = useState<"compiling" | "compiled" | "error">("error");
+  // Track whether we've initialized the editor from the loaded resume
+  const [initialized, setInitialized] = useState(false);
 
-  function handleLineClick(line: number) {
+  // Once resume loads, set initial LaTeX in editor
+  if (resume && !initialized) {
+    setLatex(resume.latex_source);
+    setInitialized(true);
+  }
+
+  const currentLatex = latex ?? "";
+
+  const {
+    pdfData,
+    errors: compileErrors,
+    status: compileStatus,
+    compiledAgo,
+  } = useCompiler(currentLatex);
+
+  const handleLineClick = useCallback((line: number) => {
+    // Could scroll CodeMirror to line in the future
     console.log("Navigate to line:", line);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!resume || latex === null) return;
+    try {
+      setSaveError(null);
+      await save({ latex_source: latex });
+    } catch {
+      setSaveError("Failed to save");
+    }
+  }, [resume, latex, save]);
+
+  const handleDownload = useCallback(async () => {
+    if (!currentLatex.trim()) return;
+
+    try {
+      const resp = await api.post(
+        "/api/compile",
+        { latex: currentLatex },
+        { responseType: "arraybuffer" }
+      );
+      const blob = new Blob([resp.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${resume?.title ?? "resume"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download compile failed:", err);
+    }
+  }, [currentLatex, resume?.title]);
+
+  // Build breadcrumb
+  const breadcrumb: { label: string; href?: string }[] = [
+    { label: "Dashboard", href: "/dashboard" },
+  ];
+  if (parentResume) {
+    breadcrumb.push({ label: parentResume.title });
+  }
+  if (resume) {
+    breadcrumb.push({ label: resume.title });
+  }
+
+  // Map compile status to StatusPill status
+  const pillStatus: "compiling" | "compiled" | "error" =
+    compileStatus === "compiling"
+      ? "compiling"
+      : compileStatus === "error"
+        ? "error"
+        : compileStatus === "compiled"
+          ? "compiled"
+          : "compiled";
+
+  if (loading) {
+    return (
+      <div className="flex h-screen flex-col">
+        <Toolbar user={{ name: "Utkarsh Agarwal" }} />
+        <div className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-bg-border border-t-accent-amber" />
+            <p className="text-sm text-text-secondary">Loading resume...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="flex h-screen flex-col">
+        <Toolbar user={{ name: "Utkarsh Agarwal" }} />
+        <div className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <p className="text-lg font-semibold text-text-primary">
+              Resume not found
+            </p>
+            <p className="text-sm text-text-secondary">
+              This resume may have been deleted.
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="mt-2 text-sm text-accent-amber hover:underline cursor-pointer"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen flex-col">
+        <Toolbar user={{ name: "Utkarsh Agarwal" }} />
+        <div className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <p className="text-sm text-status-error">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-sm text-accent-amber hover:underline cursor-pointer"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex h-screen flex-col">
       <Toolbar
-        breadcrumb={[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: "Software Engineer \u2014 Master" },
-          { label: "Frontend Focus" },
-        ]}
+        breadcrumb={breadcrumb}
         user={{ name: "Utkarsh Agarwal" }}
+        actions={
+          <div className="flex items-center gap-2">
+            {saveError && (
+              <span className="text-xs text-status-error">{saveError}</span>
+            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex h-8 items-center gap-1.5 rounded-md border border-bg-border px-3 text-xs font-medium text-text-secondary transition-colors hover:border-accent-amber hover:text-accent-amber disabled:opacity-50 cursor-pointer"
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="flex h-8 items-center gap-1.5 rounded-md bg-accent-amber px-3 text-xs font-semibold text-bg-deep transition-opacity hover:opacity-90 cursor-pointer"
+            >
+              Download PDF
+            </button>
+          </div>
+        }
       >
-        <StatusPill
-          status={status}
-          compiledAgo="2s ago"
-          errorCount={MOCK_ERRORS.length}
-          onErrorClick={() => setErrorsExpanded(!errorsExpanded)}
-        />
+        {compileStatus !== "idle" && (
+          <StatusPill
+            status={pillStatus}
+            compiledAgo={compiledAgo}
+            errorCount={compileErrors.length}
+            onErrorClick={() => setErrorsExpanded(!errorsExpanded)}
+          />
+        )}
       </Toolbar>
 
       {/* Main editor area */}
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-        {/* Mobile: stacked layout */}
+        {/* Desktop: split pane layout */}
         <div className="hidden md:flex md:flex-1 md:flex-col md:overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <SplitPane
               left={
                 <div className="flex h-full flex-col">
                   <div className="flex-1 overflow-hidden">
-                    <EditorPanel value={latex} onChange={setLatex} />
+                    <EditorPanel value={currentLatex} onChange={setLatex} />
                   </div>
                   <ErrorPanel
-                    errors={MOCK_ERRORS}
+                    errors={compileErrors}
                     expanded={errorsExpanded}
                     onToggle={() => setErrorsExpanded(!errorsExpanded)}
                     onLineClick={handleLineClick}
                   />
                 </div>
               }
-              right={<PreviewPanel pdfData={null} />}
+              right={<PreviewPanel pdfData={pdfData} />}
               defaultSize={50}
             />
           </div>
@@ -120,16 +228,16 @@ export default function EditorPage() {
         {/* Mobile: stacked fallback */}
         <div className="flex flex-1 flex-col overflow-hidden md:hidden">
           <div className="flex-1 overflow-hidden">
-            <EditorPanel value={latex} onChange={setLatex} />
+            <EditorPanel value={currentLatex} onChange={setLatex} />
           </div>
           <ErrorPanel
-            errors={MOCK_ERRORS}
+            errors={compileErrors}
             expanded={errorsExpanded}
             onToggle={() => setErrorsExpanded(!errorsExpanded)}
             onLineClick={handleLineClick}
           />
           <div className="h-64 border-t border-bg-border">
-            <PreviewPanel pdfData={null} />
+            <PreviewPanel pdfData={pdfData} />
           </div>
         </div>
       </div>

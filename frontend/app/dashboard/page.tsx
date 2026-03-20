@@ -1,50 +1,46 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Toolbar from "@/components/Toolbar";
 import ResumeGroupCard from "@/components/dashboard/ResumeGroupCard";
 import EmptyState from "@/components/dashboard/EmptyState";
 import NewResumeButton from "@/components/dashboard/NewResumeButton";
 import ConfirmModal from "@/components/ConfirmModal";
-
-// Mock data for development
-const MOCK_RESUMES = [
-  {
-    id: "1",
-    title: "Software Engineer \u2014 Master",
-    updatedAt: "2026-03-19T00:00:00Z",
-    subResumes: [
-      { id: "2", title: "Frontend Focus", updatedAt: "2026-03-19T00:00:00Z" },
-      { id: "3", title: "Backend + Infra", updatedAt: "2026-03-18T00:00:00Z" },
-      { id: "4", title: "Startup (YC apps)", updatedAt: "2026-03-17T00:00:00Z" },
-    ],
-  },
-  {
-    id: "5",
-    title: "Data Science Resume",
-    updatedAt: "2026-03-15T00:00:00Z",
-    subResumes: [],
-  },
-];
-
-// Toggle this to see empty state: set to true
-const SHOW_EMPTY_STATE = false;
+import { useResumes } from "@/hooks/useResumes";
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const {
+    resumes,
+    loading,
+    error,
+    createResume,
+    createSubResume,
+    renameResume,
+    duplicateResume,
+    deleteResume,
+  } = useResumes();
+
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     id: string;
     title: string;
   }>({ open: false, id: "", title: "" });
 
-  const resumes = SHOW_EMPTY_STATE ? [] : MOCK_RESUMES;
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
-  function handleEdit(id: string) {
-    // Will be wired to router.push(`/editor/${id}`)
-    console.log("Edit:", id);
+  async function handleEdit(id: string) {
+    router.push(`/editor/${id}`);
   }
 
-  function handleMenuAction(id: string, action: string) {
+  async function handleMenuAction(id: string, action: string) {
+    if (action === "edit") {
+      router.push(`/editor/${id}`);
+      return;
+    }
+
     if (action === "delete") {
       const resume = resumes.find(
         (r) => r.id === id || r.subResumes.some((s) => s.id === id)
@@ -56,22 +52,74 @@ export default function DashboardPage() {
       if (target) {
         setDeleteModal({ open: true, id, title: target.title });
       }
-    } else {
-      console.log("Menu action:", action, "on", id);
+      return;
+    }
+
+    if (action === "rename") {
+      setRenamingId(id);
+      return;
+    }
+
+    if (action === "duplicate") {
+      try {
+        await duplicateResume(id);
+      } catch (err) {
+        console.error("Duplicate failed:", err);
+      }
+      return;
+    }
+
+    if (action === "create-sub") {
+      try {
+        const newId = await createSubResume(id, "Untitled Sub-Resume");
+        router.push(`/editor/${newId}`);
+      } catch (err) {
+        console.error("Create sub-resume failed:", err);
+      }
+      return;
     }
   }
 
-  function handleNewSubResume(parentId: string) {
-    console.log("New sub-resume for:", parentId);
+  async function handleNewSubResume(parentId: string) {
+    try {
+      const newId = await createSubResume(parentId, "Untitled Sub-Resume");
+      router.push(`/editor/${newId}`);
+    } catch (err) {
+      console.error("Create sub-resume failed:", err);
+    }
   }
 
-  function handleNewResume() {
-    console.log("Create new resume");
+  async function handleNewResume() {
+    if (isCreating) return;
+    try {
+      setIsCreating(true);
+      const newId = await createResume("Untitled Resume");
+      router.push(`/editor/${newId}`);
+    } catch (err) {
+      console.error("Create resume failed:", err);
+    } finally {
+      setIsCreating(false);
+    }
   }
 
-  function handleDeleteConfirm() {
-    console.log("Delete confirmed:", deleteModal.id);
-    setDeleteModal({ open: false, id: "", title: "" });
+  async function handleDeleteConfirm() {
+    try {
+      await deleteResume(deleteModal.id);
+    } catch (err) {
+      console.error("Delete failed:", err);
+    } finally {
+      setDeleteModal({ open: false, id: "", title: "" });
+    }
+  }
+
+  async function handleRename(id: string, newTitle: string) {
+    try {
+      await renameResume(id, newTitle);
+    } catch (err) {
+      console.error("Rename failed:", err);
+    } finally {
+      setRenamingId(null);
+    }
   }
 
   return (
@@ -92,7 +140,29 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {resumes.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-bg-border border-t-accent-amber" />
+                <p className="text-sm text-text-secondary">
+                  Loading resumes...
+                </p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <p className="text-sm text-status-error">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="text-sm text-accent-amber hover:underline cursor-pointer"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          ) : resumes.length === 0 ? (
             <EmptyState onCreate={handleNewResume} />
           ) : (
             <div className="flex flex-col gap-4">
@@ -103,6 +173,9 @@ export default function DashboardPage() {
                   onEdit={handleEdit}
                   onMenuAction={handleMenuAction}
                   onNewSubResume={handleNewSubResume}
+                  renamingId={renamingId}
+                  onRename={handleRename}
+                  onCancelRename={() => setRenamingId(null)}
                 />
               ))}
             </div>

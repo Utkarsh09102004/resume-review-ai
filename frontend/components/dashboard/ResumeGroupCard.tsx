@@ -3,6 +3,7 @@
 import { Pencil, Plus, Square } from "lucide-react";
 import ResumeMenu from "./ResumeMenu";
 import SubResumeRow from "./SubResumeRow";
+import InlineRename from "./InlineRename";
 
 interface SubResume {
   id: string;
@@ -22,6 +23,9 @@ interface ResumeGroupCardProps {
   onEdit: (id: string) => void;
   onMenuAction: (id: string, action: string) => void;
   onNewSubResume: (parentId: string) => void;
+  renamingId?: string | null;
+  onRename?: (id: string, newTitle: string) => void;
+  onCancelRename?: () => void;
 }
 
 function formatDate(dateStr: string): string {
@@ -38,7 +42,12 @@ export default function ResumeGroupCard({
   onEdit,
   onMenuAction,
   onNewSubResume,
+  renamingId,
+  onRename,
+  onCancelRename,
 }: ResumeGroupCardProps) {
+  const isRenaming = renamingId === resume.id;
+
   return (
     <div className="rounded-xl border border-bg-border bg-bg-surface p-5 transition-shadow hover:shadow-lg hover:shadow-black/20">
       {/* Header row */}
@@ -48,12 +57,22 @@ export default function ResumeGroupCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-text-primary truncate">
-            {resume.title}
-          </h3>
-          <p className="text-xs text-text-secondary mt-0.5">
-            {formatDate(resume.updatedAt)}
-          </p>
+          {isRenaming && onRename && onCancelRename ? (
+            <InlineRename
+              value={resume.title}
+              onSave={(newTitle) => onRename(resume.id, newTitle)}
+              onCancel={onCancelRename}
+            />
+          ) : (
+            <>
+              <h3 className="text-sm font-semibold text-text-primary truncate">
+                {resume.title}
+              </h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                {formatDate(resume.updatedAt)}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -83,6 +102,9 @@ export default function ResumeGroupCard({
               isLast={idx === resume.subResumes.length - 1}
               onEdit={onEdit}
               onMenuAction={onMenuAction}
+              isRenaming={renamingId === sub.id}
+              onRename={onRename}
+              onCancelRename={onCancelRename}
             />
           ))}
         </div>

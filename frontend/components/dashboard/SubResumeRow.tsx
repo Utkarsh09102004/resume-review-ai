@@ -3,6 +3,7 @@
 import { FileText, Pencil } from "lucide-react";
 import TreeConnector from "./TreeConnector";
 import ResumeMenu from "./ResumeMenu";
+import InlineRename from "./InlineRename";
 
 interface SubResume {
   id: string;
@@ -15,6 +16,9 @@ interface SubResumeRowProps {
   isLast: boolean;
   onEdit: (id: string) => void;
   onMenuAction: (id: string, action: string) => void;
+  isRenaming?: boolean;
+  onRename?: (id: string, newTitle: string) => void;
+  onCancelRename?: () => void;
 }
 
 function formatDate(dateStr: string): string {
@@ -31,6 +35,9 @@ export default function SubResumeRow({
   isLast,
   onEdit,
   onMenuAction,
+  isRenaming,
+  onRename,
+  onCancelRename,
 }: SubResumeRowProps) {
   return (
     <div className="flex items-center group transition-colors hover:bg-bg-elevated rounded-md -mx-2 px-2">
@@ -38,12 +45,24 @@ export default function SubResumeRow({
 
       <div className="flex flex-1 items-center gap-3 py-2 min-w-0">
         <FileText size={16} className="text-text-secondary shrink-0" />
-        <span className="text-sm text-text-primary truncate">
-          {resume.title}
-        </span>
-        <span className="text-xs text-text-secondary whitespace-nowrap ml-auto mr-2">
-          {formatDate(resume.updatedAt)}
-        </span>
+        {isRenaming && onRename && onCancelRename ? (
+          <div className="flex-1 min-w-0">
+            <InlineRename
+              value={resume.title}
+              onSave={(newTitle) => onRename(resume.id, newTitle)}
+              onCancel={onCancelRename}
+            />
+          </div>
+        ) : (
+          <>
+            <span className="text-sm text-text-primary truncate">
+              {resume.title}
+            </span>
+            <span className="text-xs text-text-secondary whitespace-nowrap ml-auto mr-2">
+              {formatDate(resume.updatedAt)}
+            </span>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

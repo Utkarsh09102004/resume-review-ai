@@ -58,23 +58,31 @@ export default function Toolbar({
       <div className="flex shrink-0 items-center gap-3">
         {actions}
         {user ? (
-          <div
-            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-bg-border bg-bg-surface"
-            title={user.name}
-          >
-            {user.avatarUrl ? (
-              // External IdP avatars can come from arbitrary hosts, so keep a plain img here.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={user.avatarUrl}
-                alt={user.name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-xs font-medium text-text-secondary">
-                {user.name[0]?.toUpperCase()}
-              </span>
-            )}
+          <div className="flex items-center gap-2">
+            <a
+              href="/api/logto/sign-out"
+              className="text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+            >
+              Sign out
+            </a>
+            <div
+              className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-bg-border bg-bg-surface"
+              title={user.name}
+            >
+              {user.avatarUrl ? (
+                // External IdP avatars can come from arbitrary hosts, so keep a plain img here.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-xs font-medium text-text-secondary">
+                  {user.name[0]?.toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
         ) : null}
       </div>

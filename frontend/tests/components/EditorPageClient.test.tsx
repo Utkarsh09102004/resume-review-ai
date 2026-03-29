@@ -142,6 +142,17 @@ describe("EditorWorkspace", () => {
     expect(screen.getByText("My Resume")).toBeInTheDocument();
   });
 
+  it("exposes a sign-out link in the authenticated toolbar", async () => {
+    await act(async () => {
+      renderEditor();
+    });
+
+    expect(screen.getByRole("link", { name: "Sign out" })).toHaveAttribute(
+      "href",
+      "/api/logto/sign-out"
+    );
+  });
+
   it("saves updated latex through the server action", async () => {
     renderEditor();
 

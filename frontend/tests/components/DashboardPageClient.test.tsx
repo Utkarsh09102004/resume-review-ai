@@ -81,6 +81,21 @@ describe("DashboardPageClient", () => {
     expect(screen.getByText("No resumes yet")).toBeInTheDocument();
   });
 
+  it("exposes a sign-out link in the authenticated toolbar", () => {
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[]}
+        initialError={null}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: "Sign out" })).toHaveAttribute(
+      "href",
+      "/api/logto/sign-out"
+    );
+  });
+
   it("renders resume cards when resumes exist", () => {
     render(
       <DashboardPageClient

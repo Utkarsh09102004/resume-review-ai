@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
+import { loadPdfJs } from "@/lib/pdfjs";
 
 interface PreviewPanelProps {
   pdfData: Uint8Array | null;
@@ -17,6 +18,7 @@ export default function PreviewPanel({
   const containerRef = useRef<HTMLDivElement>(null);
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const loadGenerationRef = useRef(0);
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -48,18 +50,32 @@ export default function PreviewPanel({
     }
 
     let cancelled = false;
+    const loadGeneration = ++loadGenerationRef.current;
+    const nextPdfData = pdfData;
 
     async function loadPdf() {
-      const pdfjsLib = await import("pdfjs-dist");
+      const pdfjsLib = await loadPdfJs();
+      if (cancelled || loadGenerationRef.current !== loadGeneration) {
+        return;
+      }
+
       pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-      if (!pdfData) return;
-      const loadingTask = pdfjsLib.getDocument({ data: pdfData.slice() });
+      const loadingTask = pdfjsLib.getDocument({ data: nextPdfData.slice() });
+      if (cancelled || loadGenerationRef.current !== loadGeneration) {
+        void loadingTask.destroy();
+        return;
+      }
+
       loadingTaskRef.current = loadingTask;
       try {
         const pdf = await loadingTask.promise;
 
-        if (cancelled || loadingTaskRef.current !== loadingTask) {
+        if (
+          cancelled ||
+          loadGenerationRef.current !== loadGeneration ||
+          loadingTaskRef.current !== loadingTask
+        ) {
           void pdf.destroy();
           return;
         }
@@ -69,7 +85,11 @@ export default function PreviewPanel({
         setNumPages(pdf.numPages);
         setCurrentPage(1);
       } catch {
-        if (!cancelled && loadingTaskRef.current === loadingTask) {
+        if (
+          !cancelled &&
+          loadGenerationRef.current === loadGeneration &&
+          loadingTaskRef.current === loadingTask
+        ) {
           loadingTaskRef.current = null;
         }
       }

@@ -105,6 +105,30 @@ async def test_create_sub_resume_other_users_parent(client: AsyncClient, test_en
 
 
 @pytest.mark.asyncio
+async def test_create_resume_empty_title(client: AsyncClient) -> None:
+    resp = await client.post("/api/resumes/", json={"title": ""})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_resume_null_title(client: AsyncClient) -> None:
+    create_resp = await client.post("/api/resumes/", json={"title": "Valid"})
+    resume_id = create_resp.json()["id"]
+
+    resp = await client.put(f"/api/resumes/{resume_id}", json={"title": None})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_resume_empty_title(client: AsyncClient) -> None:
+    create_resp = await client.post("/api/resumes/", json={"title": "Valid"})
+    resume_id = create_resp.json()["id"]
+
+    resp = await client.put(f"/api/resumes/{resume_id}", json={"title": ""})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_list_resumes(client: AsyncClient) -> None:
     resp1 = await client.post("/api/resumes/", json={"title": "First"})
     assert resp1.status_code == 201

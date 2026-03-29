@@ -23,6 +23,8 @@ class Resume(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     latex_source: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # NOTE: onupdate=func.now() fires at ORM flush time only.
+    # Bulk updates via session.execute(update(...)) or raw SQL bypass this.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_LATEX_TEMPLATE = r"""\documentclass[a4paper,10pt]{article}
 \usepackage[margin=1in]{geometry}
@@ -28,14 +29,21 @@ email@example.com \textbar\ (555) 123-4567 \textbar\ City, State
 
 
 class ResumeCreate(BaseModel):
-    title: str = Field(..., max_length=255)
+    title: str = Field(..., min_length=1, max_length=255)
     parent_id: uuid.UUID | None = None
     latex_source: str | None = Field(default=None, max_length=500_000)
 
 
 class ResumeUpdate(BaseModel):
-    title: str | None = Field(default=None, max_length=255)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
     latex_source: str | None = Field(default=None, max_length=500_000)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def title_not_null(cls, v: Any) -> Any:
+        if v is None:
+            raise ValueError("title must not be null")
+        return v
 
 
 class ResumeResponse(BaseModel):

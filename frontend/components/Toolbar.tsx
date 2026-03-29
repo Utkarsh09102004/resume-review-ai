@@ -61,8 +61,8 @@ export default function Toolbar({
 
         {breadcrumb && breadcrumb.length > 0 ? (
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 ml-2 min-w-0">
-            {breadcrumb.map((item, i) => (
-              <span key={i} className="flex items-center gap-1.5 min-w-0">
+            {breadcrumb.map((item) => (
+              <span key={item.href ?? item.label} className="flex items-center gap-1.5 min-w-0">
                 <span className="text-text-secondary text-xs" aria-hidden="true">
                   /
                 </span>

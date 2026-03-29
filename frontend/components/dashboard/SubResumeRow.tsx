@@ -1,18 +1,11 @@
-"use client";
-
 import { FileText, Pencil } from "lucide-react";
+import type { SubResumeSummary } from "@/lib/resumes";
 import TreeConnector from "./TreeConnector";
 import ResumeMenu from "./ResumeMenu";
 import InlineRename from "./InlineRename";
 
-interface SubResume {
-  id: string;
-  title: string;
-  updatedAt: string;
-}
-
 interface SubResumeRowProps {
-  resume: SubResume;
+  resume: SubResumeSummary;
   isLast: boolean;
   onEdit: (id: string) => void;
   onMenuAction: (id: string, action: string) => void;

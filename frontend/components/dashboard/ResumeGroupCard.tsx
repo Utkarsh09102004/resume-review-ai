@@ -1,22 +1,8 @@
-"use client";
-
 import { Pencil, Plus, Square } from "lucide-react";
+import type { ResumeGroup } from "@/lib/resumes";
 import ResumeMenu from "./ResumeMenu";
 import SubResumeRow from "./SubResumeRow";
 import InlineRename from "./InlineRename";
-
-interface SubResume {
-  id: string;
-  title: string;
-  updatedAt: string;
-}
-
-interface ResumeGroup {
-  id: string;
-  title: string;
-  updatedAt: string;
-  subResumes: SubResume[];
-}
 
 interface ResumeGroupCardProps {
   resume: ResumeGroup;

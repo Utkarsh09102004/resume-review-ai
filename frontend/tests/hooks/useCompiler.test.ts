@@ -5,7 +5,7 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 // Mocks — vi.hoisted ensures these are available when vi.mock factories run
 // ---------------------------------------------------------------------------
 
-const { mockApi, mockIsAxiosError } = vi.hoisted(() => ({
+const { mockApi, mockIsAxiosError, mockIsCancel } = vi.hoisted(() => ({
   mockApi: {
     get: vi.fn(),
     post: vi.fn(),
@@ -13,10 +13,18 @@ const { mockApi, mockIsAxiosError } = vi.hoisted(() => ({
     delete: vi.fn(),
   },
   mockIsAxiosError: vi.fn(),
+  mockIsCancel: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({ default: mockApi }));
-vi.mock("axios", () => ({ default: { isAxiosError: mockIsAxiosError }, isAxiosError: mockIsAxiosError }));
+vi.mock("axios", () => ({
+  default: {
+    isAxiosError: mockIsAxiosError,
+    isCancel: mockIsCancel,
+  },
+  isAxiosError: mockIsAxiosError,
+  isCancel: mockIsCancel,
+}));
 
 // Bypass debounce — return a referentially stable wrapper (like the real hook)
 const _debouncedRef: { current: ((...args: unknown[]) => unknown) | null } = { current: null };
@@ -55,6 +63,7 @@ describe("useCompiler", () => {
     mockIsAxiosError.mockImplementation(
       (e: unknown) => !!(e && typeof e === "object" && "isAxiosError" in e && (e as Record<string, unknown>).isAxiosError),
     );
+    mockIsCancel.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -86,7 +95,9 @@ describe("useCompiler", () => {
   });
 
   it("compile error with errors array sets status to error", async () => {
-    const axiosErr = makeAxiosError({ errors: [{ line: 5, message: "Undefined control sequence" }] });
+    const axiosErr = makeAxiosError({
+      detail: { errors: [{ line: 5, message: "Undefined control sequence" }] },
+    });
     mockApi.post.mockRejectedValue(axiosErr);
 
     const { result } = renderHook(() => useCompiler(""));
@@ -151,7 +162,7 @@ describe("useCompiler", () => {
     expect(mockApi.post).toHaveBeenCalledWith(
       "/api/compile",
       { latex: "\\documentclass{article}" },
-      { responseType: "arraybuffer" },
+      expect.objectContaining({ responseType: "arraybuffer" }),
     );
   });
 });

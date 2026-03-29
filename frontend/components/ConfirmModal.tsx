@@ -9,6 +9,7 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  isPending?: boolean;
 }
 
 export default function ConfirmModal({
@@ -18,6 +19,7 @@ export default function ConfirmModal({
   title,
   message,
   confirmLabel = "Delete",
+  isPending = false,
 }: ConfirmModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -77,6 +79,7 @@ export default function ConfirmModal({
               ref={cancelRef}
               type="button"
               onClick={onClose}
+              disabled={isPending}
               className="rounded-lg border border-bg-border bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-surface cursor-pointer"
             >
               Cancel
@@ -84,9 +87,10 @@ export default function ConfirmModal({
             <button
               type="button"
               onClick={onConfirm}
+              disabled={isPending}
               className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-status-error/80 cursor-pointer"
             >
-              {confirmLabel}
+              {isPending ? "Deleting..." : confirmLabel}
             </button>
           </div>
         </div>

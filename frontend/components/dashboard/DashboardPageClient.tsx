@@ -2,36 +2,36 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  createResumeAction,
+  createSubResumeAction,
+  deleteResumeAction,
+  duplicateResumeAction,
+  renameResumeAction,
+} from "@/app/(app)/dashboard/actions";
 import Toolbar from "@/components/Toolbar";
 import ResumeGroupCard from "@/components/dashboard/ResumeGroupCard";
 import EmptyState from "@/components/dashboard/EmptyState";
 import NewResumeButton from "@/components/dashboard/NewResumeButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import NameResumeModal from "@/components/dashboard/NameResumeModal";
-import { useResumes } from "@/hooks/useResumes";
 import {
   generateDefaultTitle,
   generateSubResumeTitle,
 } from "@/lib/resumeDefaults";
 import type { UserDisplayInfo } from "@/lib/auth";
+import type { ResumeGroup } from "@/lib/resumes";
 
 export default function DashboardPageClient({
   user,
+  resumes,
+  initialError,
 }: {
   user: UserDisplayInfo;
+  resumes: ResumeGroup[];
+  initialError: string | null;
 }) {
   const router = useRouter();
-  const {
-    resumes,
-    loading,
-    error,
-    createResume,
-    createSubResume,
-    renameResume,
-    duplicateResume,
-    deleteResume,
-  } = useResumes();
-
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     id: string;
@@ -39,18 +39,22 @@ export default function DashboardPageClient({
   }>({ open: false, id: "", title: "" });
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [nameModal, setNameModal] = useState<{
     open: boolean;
     parentId: string | null;
     defaultName: string;
   }>({ open: false, parentId: null, defaultName: "" });
+  const error = actionError ?? initialError;
 
   function handleEdit(id: string) {
     router.push(`/editor/${id}`);
   }
 
   async function handleMenuAction(id: string, action: string) {
+    if (isMutating) return;
+
     if (action === "edit") {
       router.push(`/editor/${id}`);
       return;
@@ -76,11 +80,15 @@ export default function DashboardPageClient({
     }
 
     if (action === "duplicate") {
-      try {
-        await duplicateResume(id);
-      } catch (err) {
-        console.error("Duplicate failed:", err);
+      setIsMutating(true);
+      setActionError(null);
+      const result = await duplicateResumeAction(id);
+      if (result.ok) {
+        router.refresh();
+      } else {
+        setActionError(result.error);
       }
+      setIsMutating(false);
       return;
     }
 
@@ -107,40 +115,59 @@ export default function DashboardPageClient({
   }
 
   async function handleNameModalConfirm(name: string) {
-    if (isCreating) return;
+    if (isMutating) return;
 
-    try {
-      setIsCreating(true);
-      setNameModal({ open: false, parentId: null, defaultName: "" });
-      const newId = nameModal.parentId
-        ? await createSubResume(nameModal.parentId, name)
-        : await createResume(name);
-      router.push(`/editor/${newId}`);
-    } catch (err) {
-      console.error("Create resume failed:", err);
-    } finally {
-      setIsCreating(false);
+    setIsMutating(true);
+    setActionError(null);
+
+    const parentId = nameModal.parentId;
+    setNameModal({ open: false, parentId: null, defaultName: "" });
+
+    const result = parentId
+      ? await createSubResumeAction(parentId, name)
+      : await createResumeAction(name);
+
+    if (result.ok && result.resumeId) {
+      router.push(`/editor/${result.resumeId}`);
+    } else if (!result.ok) {
+      setActionError(result.error);
     }
+
+    setIsMutating(false);
   }
 
   async function handleDeleteConfirm() {
-    try {
-      await deleteResume(deleteModal.id);
-    } catch (err) {
-      console.error("Delete failed:", err);
-    } finally {
-      setDeleteModal({ open: false, id: "", title: "" });
+    if (isMutating) return;
+
+    setIsMutating(true);
+    setActionError(null);
+
+    const result = await deleteResumeAction(deleteModal.id);
+    if (result.ok) {
+      router.refresh();
+    } else {
+      setActionError(result.error);
     }
+
+    setDeleteModal({ open: false, id: "", title: "" });
+    setIsMutating(false);
   }
 
   async function handleRename(id: string, newTitle: string) {
-    try {
-      await renameResume(id, newTitle);
-    } catch (err) {
-      console.error("Rename failed:", err);
-    } finally {
-      setRenamingId(null);
+    if (isMutating) return;
+
+    setIsMutating(true);
+    setActionError(null);
+
+    const result = await renameResumeAction(id, newTitle);
+    if (result.ok) {
+      router.refresh();
+    } else {
+      setActionError(result.error);
     }
+
+    setRenamingId(null);
+    setIsMutating(false);
   }
 
   return (
@@ -158,22 +185,16 @@ export default function DashboardPageClient({
             </p>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-bg-border border-t-accent-amber" />
-                <p className="text-sm text-text-secondary">
-                  Loading resumes...
-                </p>
-              </div>
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="flex items-center justify-center py-16">
               <div className="flex flex-col items-center gap-3 text-center">
                 <p className="text-sm text-status-error">{error}</p>
                 <button
                   type="button"
-                  onClick={() => window.location.reload()}
+                  onClick={() => {
+                    setActionError(null);
+                    router.refresh();
+                  }}
                   className="cursor-pointer text-sm text-accent-amber hover:underline"
                 >
                   Try again
@@ -207,6 +228,7 @@ export default function DashboardPageClient({
         onConfirm={handleDeleteConfirm}
         title="Delete Resume"
         message={`Are you sure you want to delete "${deleteModal.title}"? This action cannot be undone.`}
+        isPending={isMutating}
       />
 
       <NameResumeModal
@@ -219,6 +241,7 @@ export default function DashboardPageClient({
           nameModal.parentId ? "Name Your Sub-Resume" : "Name Your Resume"
         }
         defaultName={nameModal.defaultName}
+        isPending={isMutating}
       />
     </div>
   );

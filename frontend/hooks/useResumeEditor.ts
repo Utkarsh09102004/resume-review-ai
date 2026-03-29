@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
-import type { ResumeFromAPI } from "./useResumes";
+import type { ResumeFromAPI } from "@/lib/resumes";
 
 export interface ResumeEditorState {
   resume: ResumeFromAPI | null;

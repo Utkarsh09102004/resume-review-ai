@@ -8,6 +8,7 @@ interface NameResumeModalProps {
   onConfirm: (name: string) => void;
   title: string;
   defaultName: string;
+  isPending?: boolean;
 }
 
 export default function NameResumeModal({
@@ -16,6 +17,7 @@ export default function NameResumeModal({
   onConfirm,
   title,
   defaultName,
+  isPending = false,
 }: NameResumeModalProps) {
   const [name, setName] = useState(defaultName);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -104,16 +106,17 @@ export default function NameResumeModal({
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isPending}
                 className="rounded-lg border border-bg-border bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-surface cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={!isValid}
+                disabled={!isValid || isPending}
                 className="rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-bg-deep transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer"
               >
-                Create
+                {isPending ? "Creating..." : "Create"}
               </button>
             </div>
           </form>

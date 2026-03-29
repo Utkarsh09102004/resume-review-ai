@@ -12,6 +12,7 @@ interface SubResumeRowProps {
   isRenaming?: boolean;
   onRename?: (id: string, newTitle: string) => void;
   onCancelRename?: () => void;
+  isMatched?: boolean;
 }
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -33,15 +34,28 @@ export default function SubResumeRow({
   isRenaming,
   onRename,
   onCancelRename,
+  isMatched = false,
 }: SubResumeRowProps) {
   return (
-    <article className="dashboard-panel dashboard-panel--interactive rounded-[24px] p-4">
+    <article
+      className={[
+        "dashboard-panel dashboard-panel--interactive rounded-[24px] p-4",
+        isMatched ? "border-accent-amber/35 bg-[rgba(49,36,20,0.42)]" : "",
+      ].join(" ")}
+    >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="dashboard-chip px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary/85">
-              <FileText size={12} className="text-accent-amber" />
-              Tailored Version
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="dashboard-chip px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary/85">
+                <FileText size={12} className="text-accent-amber" />
+                Tailored Version
+              </div>
+              {isMatched ? (
+                <div className="dashboard-chip dashboard-chip--accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]">
+                  Match
+                </div>
+              ) : null}
             </div>
 
             {isRenaming && onRename && onCancelRename ? (

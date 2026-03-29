@@ -2,20 +2,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import DashboardPageClient from "@/components/dashboard/DashboardPageClient";
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const mockRefresh = vi.fn();
 const mockCreateResumeAction = vi.fn();
 const mockCreateSubResumeAction = vi.fn();
 const mockRenameResumeAction = vi.fn();
 const mockDuplicateResumeAction = vi.fn();
 const mockDeleteResumeAction = vi.fn();
+let currentSearchParams = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    refresh: mockRefresh,
+  }),
+  usePathname: () => "/dashboard",
+  useSearchParams: () => currentSearchParams,
 }));
 
 vi.mock("@/app/(app)/dashboard/actions", () => ({
@@ -31,10 +35,6 @@ vi.mock("@/app/(app)/dashboard/actions", () => ({
     mockDeleteResumeAction(...args),
 }));
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("DashboardPageClient", () => {
   const origShowModal = HTMLDialogElement.prototype.showModal;
   const origClose = HTMLDialogElement.prototype.close;
@@ -43,6 +43,7 @@ describe("DashboardPageClient", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
     HTMLDialogElement.prototype.showModal = vi.fn();
     HTMLDialogElement.prototype.close = vi.fn();
     mockCreateResumeAction.mockResolvedValue({ ok: true, resumeId: "resume-new" });
@@ -58,7 +59,7 @@ describe("DashboardPageClient", () => {
     HTMLDialogElement.prototype.close = origClose;
   });
 
-  it("shows error state and refreshes on retry", () => {
+  it("shows the inline error state and refreshes on retry", () => {
     render(
       <DashboardPageClient
         user={{ name: "User" }}
@@ -73,7 +74,7 @@ describe("DashboardPageClient", () => {
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("shows empty state when no resumes", () => {
+  it("shows the richer empty state when no resumes exist", () => {
     render(
       <DashboardPageClient
         user={{ name: "User" }}
@@ -81,7 +82,9 @@ describe("DashboardPageClient", () => {
         initialError={null}
       />
     );
+
     expect(screen.getByText("No resumes yet")).toBeInTheDocument();
+    expect(screen.getByText("Draft a master resume")).toBeInTheDocument();
     expect(screen.getByText("Base Resumes")).toBeInTheDocument();
   });
 
@@ -112,7 +115,7 @@ describe("DashboardPageClient", () => {
     expect(screen.getAllByRole("button", { name: "New Resume" })).toHaveLength(1);
   });
 
-  it("renders the KPI strip and controls slot", () => {
+  it("renders the KPI strip and real control strip", () => {
     render(
       <DashboardPageClient
         user={{ name: "User" }}
@@ -137,8 +140,16 @@ describe("DashboardPageClient", () => {
     expect(screen.getByText("Base Resumes")).toBeInTheDocument();
     expect(screen.getAllByText("Tailored Versions").length).toBeGreaterThan(0);
     expect(screen.getByText("Recently Updated")).toBeInTheDocument();
-    expect(screen.getByText("Controls Slot")).toBeInTheDocument();
-    expect(screen.getByText("Resume library")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute(
+      "placeholder",
+      "Search resumes and tailored versions"
+    );
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByLabelText("Sort")).toHaveValue("recent");
+    expect(screen.getByText("1 resume")).toBeInTheDocument();
   });
 
   it("renders resume cards when resumes exist", () => {
@@ -212,6 +223,83 @@ describe("DashboardPageClient", () => {
 
     expect(screen.getByText("Name Your Tailored Version")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create tailored version" })).toBeInTheDocument();
+  });
+
+  it("filters by tailored-version title while keeping the base card visible", async () => {
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[
+          {
+            id: "r1",
+            title: "My Resume",
+            updatedAt: recentTimestamp,
+            subResumes: [
+              {
+                id: "r2",
+                title: "PM Resume",
+                updatedAt: recentTimestamp,
+              },
+              {
+                id: "r3",
+                title: "Marketing Resume",
+                updatedAt: staleTimestamp,
+              },
+            ],
+          },
+        ]}
+        initialError={null}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Search"), {
+      target: { value: "PM" },
+    });
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/dashboard?q=PM", { scroll: false });
+    });
+
+    expect(screen.getByText("My Resume")).toBeInTheDocument();
+    expect(screen.getByText("PM Resume")).toBeInTheDocument();
+    expect(screen.queryByText("Marketing Resume")).not.toBeInTheDocument();
+    expect(screen.getByText("Tailored match")).toBeInTheDocument();
+    expect(screen.getByText("Match")).toBeInTheDocument();
+  });
+
+  it("hydrates controls from the URL and shows the no-results state", async () => {
+    currentSearchParams = new URLSearchParams(
+      "q=designer&filter=with-tailored&sort=title-asc"
+    );
+
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[
+          {
+            id: "r1",
+            title: "Platform Resume",
+            updatedAt: recentTimestamp,
+            subResumes: [],
+          },
+        ]}
+        initialError={null}
+      />
+    );
+
+    expect(screen.getByLabelText("Search")).toHaveValue("designer");
+    expect(screen.getByRole("button", { name: "With Tailored" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByLabelText("Sort")).toHaveValue("title-asc");
+    expect(screen.getByText('No resumes match "designer".')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear filters" })[0]);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/dashboard", { scroll: false });
+    });
   });
 
   it("creates a new resume through the server action and routes to the editor", async () => {

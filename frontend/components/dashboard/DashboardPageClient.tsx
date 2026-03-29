@@ -1,17 +1,25 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useDeferredValue,
+  useEffect,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowDownUp,
   ArrowUpRight,
+  Check,
   Clock3,
   FileStack,
   Rows3,
   Search,
   SlidersHorizontal,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import Toolbar from "@/components/Toolbar";
 import ResumeGroupCard from "@/components/dashboard/ResumeGroupCard";
@@ -21,18 +29,45 @@ import ConfirmModal from "@/components/ConfirmModal";
 import NameResumeModal from "@/components/dashboard/NameResumeModal";
 import { useDashboardMutations } from "@/hooks/useDashboardMutations";
 import {
-  generateDefaultTitle,
-  generateSubResumeTitle,
-} from "@/lib/resumeDefaults";
+  buildDashboardControlsSearchParams,
+  formatDashboardResultsSummary,
+  getDefaultDashboardControls,
+  getVisibleResumeGroups,
+  hasActiveDashboardControls,
+  parseDashboardControls,
+  type DashboardFilterValue,
+  type DashboardSortValue,
+} from "@/lib/dashboardControls";
 import type { UserDisplayInfo } from "@/lib/auth";
+import { generateDefaultTitle, generateSubResumeTitle } from "@/lib/resumeDefaults";
 import type { ResumeGroup } from "@/lib/resumes";
 
 const METRIC_FORMATTER = new Intl.NumberFormat("en-US");
 const RECENT_ACTIVITY_WINDOW_DAYS = 7;
+const DEFAULT_DASHBOARD_CONTROLS = getDefaultDashboardControls();
+const DASHBOARD_FILTER_OPTIONS: {
+  label: string;
+  value: DashboardFilterValue;
+}[] = [
+  { label: "All", value: "all" },
+  { label: "With Tailored", value: "with-tailored" },
+  { label: "Without Tailored", value: "without-tailored" },
+];
+const DASHBOARD_SORT_OPTIONS: {
+  label: string;
+  value: DashboardSortValue;
+}[] = [
+  { label: "Recently updated", value: "recent" },
+  { label: "Oldest updated", value: "oldest" },
+  { label: "Title A-Z", value: "title-asc" },
+  { label: "Title Z-A", value: "title-desc" },
+  { label: "Most tailored", value: "most-tailored" },
+];
 
 function findResumeTarget(resumes: ResumeGroup[], id: string) {
   const parentResume = resumes.find(
-    (resume) => resume.id === id || resume.subResumes.some((subResume) => subResume.id === id)
+    (resume) =>
+      resume.id === id || resume.subResumes.some((subResume) => subResume.id === id)
   );
 
   if (!parentResume) {
@@ -111,6 +146,47 @@ function DashboardMetricCard({
   );
 }
 
+function DashboardFilterChip({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "dashboard-chip min-h-11 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+        active
+          ? "dashboard-chip--accent text-text-primary"
+          : "text-text-secondary hover:border-accent-amber/30 hover:text-text-primary",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "mr-2 inline-flex h-4 w-4 items-center justify-center rounded-full border",
+          active
+            ? "border-accent-amber/40 bg-accent-amber/15 text-accent-amber"
+            : "border-[color:var(--dashboard-border-subtle)] text-transparent",
+        ].join(" ")}
+        aria-hidden="true"
+      >
+        <Check size={11} />
+      </span>
+      {label}
+    </button>
+  );
+}
+
 function ControlSlotChip({
   icon: Icon,
   label,
@@ -127,10 +203,14 @@ function ControlSlotChip({
 }
 
 function InlineErrorPanel({
-  error,
+  eyebrow,
+  title,
+  description,
   onRetry,
 }: {
-  error: string;
+  eyebrow: string;
+  title: string;
+  description: string;
   onRetry: () => void;
 }) {
   return (
@@ -142,13 +222,11 @@ function InlineErrorPanel({
           </span>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-status-error/90">
-              Workspace unavailable
+              {eyebrow}
             </p>
-            <h2 className="mt-2 text-xl font-semibold text-text-primary">
-              We couldn&apos;t load your dashboard right now.
-            </h2>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">{title}</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
-              {error}
+              {description}
             </p>
           </div>
         </div>
@@ -165,6 +243,47 @@ function InlineErrorPanel({
   );
 }
 
+function NoResultsPanel({
+  query,
+  onClearFilters,
+  onCreateResume,
+}: {
+  query: string;
+  onClearFilters: () => void;
+  onCreateResume: () => void;
+}) {
+  return (
+    <div className="rounded-[28px] border border-dashed border-[color:var(--dashboard-border-subtle)] bg-[var(--dashboard-panel-hover)] p-6 sm:p-7">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-secondary/80">
+        No results
+      </p>
+      <h3 className="mt-3 text-xl font-semibold text-text-primary">
+        {query.trim()
+          ? `No resumes match "${query.trim()}".`
+          : "No resumes match this view."}
+      </h3>
+      <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
+        Try a broader search, switch back to a wider filter, or create a new
+        base resume from here.
+      </p>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={onClearFilters}
+          className="dashboard-button dashboard-button--secondary h-11 px-4 text-sm font-medium text-text-primary"
+        >
+          Clear filters
+        </button>
+        <NewResumeButton
+          onClick={onCreateResume}
+          label="Create Resume"
+          variant="primary"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPageClient({
   user,
   resumes,
@@ -175,12 +294,19 @@ export default function DashboardPageClient({
   initialError: string | null;
 }) {
   const router = useRouter();
+  const pathname = usePathname() ?? "/dashboard";
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams?.toString() ?? "";
+  const parsedControls = parseDashboardControls(searchParams ?? new URLSearchParams());
+  const [isRouting, startRoutingTransition] = useTransition();
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     id: string;
     title: string;
   }>({ open: false, id: "", title: "" });
-
+  const [query, setQuery] = useState(parsedControls.query);
+  const [filter, setFilter] = useState<DashboardFilterValue>(parsedControls.filter);
+  const [sort, setSort] = useState<DashboardSortValue>(parsedControls.sort);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [nameModal, setNameModal] = useState<{
     open: boolean;
@@ -200,15 +326,61 @@ export default function DashboardPageClient({
     openResume: (resumeId) => router.push(`/editor/${resumeId}`),
     refresh: () => router.refresh(),
   });
-  const error = actionError ?? initialError;
+  const deferredQuery = useDeferredValue(query);
+  const loadError = initialError;
+  const mutationError = loadError ? null : actionError;
   const baseResumeCount = resumes.length;
   const tailoredResumeCount = countTailoredResumes(resumes);
   const recentlyUpdatedCount = countRecentlyUpdated(resumes);
-  const totalResumeDocuments = baseResumeCount + tailoredResumeCount;
   const hasResumes = resumes.length > 0;
-  const resultSummary = hasResumes
-    ? `${pluralize(totalResumeDocuments, "resume document", "resume documents")} across ${pluralize(baseResumeCount, "base project", "base projects")}`
-    : "Start a base resume here, then branch tailored versions as opportunities change.";
+  const visibleResumes = getVisibleResumeGroups(resumes, {
+    query: deferredQuery,
+    filter,
+    sort,
+  });
+  const hasVisibleResumes = visibleResumes.length > 0;
+  const controlsDisabled = Boolean(loadError) || !hasResumes;
+  const hasActiveControls = hasActiveDashboardControls({ query, filter, sort });
+  const resultSummary = loadError
+    ? "Dashboard unavailable"
+    : hasResumes
+      ? formatDashboardResultsSummary(visibleResumes.length, {
+          query: deferredQuery,
+          filter,
+        })
+      : "No resume projects yet";
+  const resultsHelperText = loadError
+    ? "Reload to restore dashboard controls."
+    : !hasResumes
+      ? "Create a base resume to unlock search, filters, and sorting."
+      : isRouting
+        ? "Updating the shareable dashboard URL."
+        : "Search base resume titles and tailored versions from one workspace.";
+
+  useEffect(() => {
+    setQuery((current) => (current === parsedControls.query ? current : parsedControls.query));
+    setFilter((current) => (current === parsedControls.filter ? current : parsedControls.filter));
+    setSort((current) => (current === parsedControls.sort ? current : parsedControls.sort));
+  }, [parsedControls.filter, parsedControls.query, parsedControls.sort]);
+
+  useEffect(() => {
+    const nextSearchParams = buildDashboardControlsSearchParams(
+      { query, filter, sort },
+      searchParamsString
+    );
+    const nextSearchParamsString = nextSearchParams.toString();
+
+    if (nextSearchParamsString === searchParamsString) {
+      return;
+    }
+
+    startRoutingTransition(() => {
+      router.replace(
+        nextSearchParamsString ? `${pathname}?${nextSearchParamsString}` : pathname,
+        { scroll: false }
+      );
+    });
+  }, [filter, pathname, query, router, searchParamsString, sort]);
 
   function handleOpen(id: string) {
     router.push(`/editor/${id}`);
@@ -233,7 +405,7 @@ export default function DashboardPageClient({
   }
 
   function handleCreateSubResume(parentId: string) {
-    const parent = resumes.find((r) => r.id === parentId);
+    const parent = resumes.find((resume) => resume.id === parentId);
     const defaultName = parent
       ? generateSubResumeTitle(parent.title, parent.subResumes.length)
       : "Untitled Tailored Version";
@@ -241,8 +413,19 @@ export default function DashboardPageClient({
   }
 
   function handleNewResume() {
-    const defaultName = generateDefaultTitle(resumes.map((r) => r.title));
+    const defaultName = generateDefaultTitle(resumes.map((resume) => resume.title));
     setNameModal({ open: true, parentId: null, defaultName });
+  }
+
+  function handleResetControls() {
+    setQuery(DEFAULT_DASHBOARD_CONTROLS.query);
+    setFilter(DEFAULT_DASHBOARD_CONTROLS.filter);
+    setSort(DEFAULT_DASHBOARD_CONTROLS.sort);
+  }
+
+  function handleRetry() {
+    clearActionError();
+    router.refresh();
   }
 
   async function handleNameModalConfirm(name: string) {
@@ -346,12 +529,12 @@ export default function DashboardPageClient({
 
               <div className="mt-5 rounded-[22px] border border-[color:var(--dashboard-border-subtle)] bg-[rgba(29,30,39,0.58)] p-4">
                 <div className="flex items-start gap-3">
-                <ArrowUpRight size={18} className="mt-0.5 shrink-0 text-accent-amber" />
-                <p className="text-sm leading-7 text-text-secondary">
-                  The toolbar stays product-level on this screen. Creation
-                  starts in the hero, while editing and branching continue in
-                  the workspace below.
-                </p>
+                  <ArrowUpRight size={18} className="mt-0.5 shrink-0 text-accent-amber" />
+                  <p className="text-sm leading-7 text-text-secondary">
+                    The toolbar stays product-level on this screen. Creation
+                    starts in the hero, while editing and branching continue in
+                    the workspace below.
+                  </p>
                 </div>
               </div>
             </aside>
@@ -390,7 +573,7 @@ export default function DashboardPageClient({
           </section>
 
           <section className="space-y-5 lg:space-y-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
                   Results
@@ -403,32 +586,126 @@ export default function DashboardPageClient({
                   from the most recently updated project.
                 </p>
               </div>
-              <div className="dashboard-chip px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary tabular-nums">
-                {resultSummary}
-              </div>
             </div>
 
             <div
               className="dashboard-panel dashboard-enter p-5 sm:p-6"
               style={enterDelay(200)}
             >
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
-                    Controls Slot
-                  </p>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
-                    Search, filters, and sort controls land here next. This
-                    shell keeps their footprint stable before the behavior work
-                    ships.
-                  </p>
+              <div className="flex flex-col gap-5">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] xl:items-end">
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="dashboard-search"
+                      className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75"
+                    >
+                      Search
+                    </label>
+                    <div className="relative">
+                      <Search
+                        size={16}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary"
+                      />
+                      <input
+                        id="dashboard-search"
+                        type="search"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Search resumes and tailored versions"
+                        disabled={controlsDisabled}
+                        className="h-12 w-full rounded-2xl border border-[color:var(--dashboard-border-subtle)] bg-[rgba(29,30,39,0.58)] pl-11 pr-11 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/70 focus:border-accent-amber/35 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      {query ? (
+                        <button
+                          type="button"
+                          onClick={() => setQuery("")}
+                          className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-[rgba(255,255,255,0.04)] hover:text-text-primary"
+                          aria-label="Clear search"
+                        >
+                          <X size={14} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
+                      Filters
+                    </p>
+                    <div
+                      className="flex flex-wrap gap-2"
+                      role="group"
+                      aria-label="Filter resumes"
+                    >
+                      {DASHBOARD_FILTER_OPTIONS.map((option) => (
+                        <DashboardFilterChip
+                          key={option.value}
+                          label={option.label}
+                          active={filter === option.value}
+                          disabled={controlsDisabled}
+                          onClick={() => setFilter(option.value)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="dashboard-sort"
+                      className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75"
+                    >
+                      Sort
+                    </label>
+                    <div className="relative min-w-[14rem]">
+                      <ArrowDownUp
+                        size={16}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary"
+                      />
+                      <select
+                        id="dashboard-sort"
+                        value={sort}
+                        onChange={(event) =>
+                          setSort(event.target.value as DashboardSortValue)
+                        }
+                        disabled={controlsDisabled}
+                        className="h-12 w-full appearance-none rounded-2xl border border-[color:var(--dashboard-border-subtle)] bg-[rgba(29,30,39,0.58)] pl-11 pr-4 text-sm text-text-primary outline-none transition-colors focus:border-accent-amber/35 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {DASHBOARD_SORT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <ControlSlotChip icon={Search} label="Search" />
-                  <ControlSlotChip icon={SlidersHorizontal} label="Filters" />
-                  <ControlSlotChip icon={ArrowDownUp} label="Sort" />
+                <div className="flex flex-col gap-3 border-t border-[color:var(--dashboard-border-subtle)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    aria-live="polite"
+                    className="text-sm font-medium text-text-primary"
+                  >
+                    {resultSummary}
+                  </p>
+                  {hasActiveControls && hasResumes && !loadError ? (
+                    <button
+                      type="button"
+                      onClick={handleResetControls}
+                      className="dashboard-button dashboard-button--secondary h-10 px-4 text-sm font-medium text-text-primary"
+                    >
+                      Clear filters
+                    </button>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <ControlSlotChip icon={Search} label="Search" />
+                      <ControlSlotChip icon={SlidersHorizontal} label="Filters" />
+                      <ControlSlotChip icon={ArrowDownUp} label="Sort" />
+                    </div>
+                  )}
                 </div>
+                <p className="text-xs uppercase tracking-[0.18em] text-text-secondary/80">
+                  {resultsHelperText}
+                </p>
               </div>
             </div>
 
@@ -436,16 +713,32 @@ export default function DashboardPageClient({
               className="dashboard-panel dashboard-enter p-4 sm:p-6 lg:p-7"
               style={enterDelay(240)}
             >
-              {error ? (
+              {mutationError ? (
+                <div className="mb-5">
+                  <InlineErrorPanel
+                    eyebrow="Action unavailable"
+                    title="That change didn&apos;t go through."
+                    description={mutationError}
+                    onRetry={handleRetry}
+                  />
+                </div>
+              ) : null}
+
+              {loadError ? (
                 <InlineErrorPanel
-                  error={error}
-                  onRetry={() => {
-                    clearActionError();
-                    router.refresh();
-                  }}
+                  eyebrow="Workspace unavailable"
+                  title="We couldn&apos;t load your dashboard right now."
+                  description={loadError}
+                  onRetry={handleRetry}
                 />
-              ) : resumes.length === 0 ? (
+              ) : !hasResumes ? (
                 <EmptyState onCreate={handleNewResume} />
+              ) : !hasVisibleResumes ? (
+                <NoResultsPanel
+                  query={query}
+                  onClearFilters={handleResetControls}
+                  onCreateResume={handleNewResume}
+                />
               ) : (
                 <div className="space-y-5">
                   <div className="flex flex-col gap-2 border-b border-[color:var(--dashboard-border-subtle)] pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -454,17 +747,20 @@ export default function DashboardPageClient({
                         Content
                       </p>
                       <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-text-primary">
-                        All resume projects
+                        {hasActiveControls
+                          ? "Filtered resume projects"
+                          : "All resume projects"}
                       </h3>
                     </div>
                     <p className="text-sm text-text-secondary">
-                      Base resumes anchor each project card, with tailored
-                      versions attached inside a dedicated section.
+                      Search keeps base resumes visible when tailored versions
+                      match, with matching variants preserved inside each
+                      project card.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                    {resumes.map((resume, index) => (
+                    {visibleResumes.map((resume, index) => (
                       <ResumeGroupCard
                         key={resume.id}
                         resume={resume}
@@ -477,6 +773,9 @@ export default function DashboardPageClient({
                         onRename={handleRename}
                         onCancelRename={() => setRenamingId(null)}
                         animationDelayMs={280 + index * 40}
+                        visibleSubResumes={resume.visibleSubResumes}
+                        matchedSubResumeIds={resume.matchedSubResumeIds}
+                        searchMatchSource={resume.searchMatchSource}
                       />
                     ))}
                   </div>

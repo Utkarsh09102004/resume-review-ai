@@ -1,4 +1,5 @@
 import { ArrowUpRight, Copy, FileStack, PencilLine, Plus, Sparkles } from "lucide-react";
+import type { DashboardSearchMatchSource } from "@/lib/dashboardControls";
 import type { ResumeGroup } from "@/lib/resumes";
 import { MainResumeMenu } from "./ResumeMenu";
 import SubResumeRow from "./SubResumeRow";
@@ -15,6 +16,9 @@ interface ResumeGroupCardProps {
   onRename?: (id: string, newTitle: string) => void;
   onCancelRename?: () => void;
   animationDelayMs?: number;
+  visibleSubResumes?: ResumeGroup["subResumes"];
+  matchedSubResumeIds?: string[];
+  searchMatchSource?: DashboardSearchMatchSource;
 }
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -42,9 +46,21 @@ export default function ResumeGroupCard({
   onRename,
   onCancelRename,
   animationDelayMs = 0,
+  visibleSubResumes,
+  matchedSubResumeIds = [],
+  searchMatchSource = null,
 }: ResumeGroupCardProps) {
   const isRenaming = renamingId === resume.id;
-  const hasTailoredVersions = resume.subResumes.length > 0;
+  const subResumes = visibleSubResumes ?? resume.subResumes;
+  const hasVisibleTailoredVersions = subResumes.length > 0;
+  const searchMatchLabel =
+    searchMatchSource === "both"
+      ? "Base + tailored match"
+      : searchMatchSource === "base"
+        ? "Title match"
+        : searchMatchSource === "tailored"
+          ? "Tailored match"
+          : null;
 
   return (
     <article
@@ -77,17 +93,24 @@ export default function ResumeGroupCard({
                 />
               </div>
             ) : (
-              <h3
-                className="group/title mt-3 inline-flex cursor-text items-center gap-1 truncate text-xl font-semibold tracking-[-0.03em] text-text-primary sm:text-2xl"
-                onDoubleClick={() => onRequestRename(resume.id)}
-                title="Double-click to rename"
-              >
-                <span className="truncate">{resume.title}</span>
-                <PencilLine
-                  size={13}
-                  className="shrink-0 text-text-secondary opacity-0 transition-opacity group-hover/title:opacity-50"
-                />
-              </h3>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <h3
+                  className="group/title inline-flex cursor-text items-center gap-1 truncate text-xl font-semibold tracking-[-0.03em] text-text-primary sm:text-2xl"
+                  onDoubleClick={() => onRequestRename(resume.id)}
+                  title="Double-click to rename"
+                >
+                  <span className="truncate">{resume.title}</span>
+                  <PencilLine
+                    size={13}
+                    className="shrink-0 text-text-secondary opacity-0 transition-opacity group-hover/title:opacity-50"
+                  />
+                </h3>
+                {searchMatchLabel ? (
+                  <span className="dashboard-chip dashboard-chip--accent px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]">
+                    {searchMatchLabel}
+                  </span>
+                ) : null}
+              </div>
             )}
 
             <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
@@ -160,9 +183,9 @@ export default function ResumeGroupCard({
           </div>
         </div>
 
-        {hasTailoredVersions ? (
+        {hasVisibleTailoredVersions ? (
           <div className="mt-4 space-y-3">
-            {resume.subResumes.map((sub) => (
+            {subResumes.map((sub) => (
               <SubResumeRow
                 key={sub.id}
                 resume={sub}
@@ -173,6 +196,7 @@ export default function ResumeGroupCard({
                 isRenaming={renamingId === sub.id}
                 onRename={onRename}
                 onCancelRename={onCancelRename}
+                isMatched={matchedSubResumeIds.includes(sub.id)}
               />
             ))}
           </div>
@@ -205,7 +229,7 @@ export default function ResumeGroupCard({
         )}
       </section>
 
-      {hasTailoredVersions ? (
+      {hasVisibleTailoredVersions ? (
         <button
           type="button"
           onClick={() => onCreateSubResume(resume.id)}

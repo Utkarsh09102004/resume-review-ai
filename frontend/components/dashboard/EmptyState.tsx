@@ -27,6 +27,33 @@ export default function EmptyState({ onCreate }: EmptyStateProps) {
           draft.
         </p>
 
+        <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left sm:grid-cols-3">
+          <div className="rounded-2xl border border-bg-border/80 bg-bg-elevated/55 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-secondary/80">
+              Step 1
+            </p>
+            <p className="mt-2 text-sm font-medium text-text-primary">
+              Draft a master resume
+            </p>
+          </div>
+          <div className="rounded-2xl border border-bg-border/80 bg-bg-elevated/55 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-secondary/80">
+              Step 2
+            </p>
+            <p className="mt-2 text-sm font-medium text-text-primary">
+              Branch tailored versions
+            </p>
+          </div>
+          <div className="rounded-2xl border border-bg-border/80 bg-bg-elevated/55 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-secondary/80">
+              Step 3
+            </p>
+            <p className="mt-2 text-sm font-medium text-text-primary">
+              Keep each opportunity separate
+            </p>
+          </div>
+        </div>
+
         <div className="mt-8 flex justify-center">
           <NewResumeButton
             onClick={onCreate}

@@ -1,13 +1,11 @@
-import { FileText, Pencil } from "lucide-react";
+import { ArrowUpRight, FileText, PencilLine } from "lucide-react";
 import type { SubResumeSummary } from "@/lib/resumes";
-import TreeConnector from "./TreeConnector";
 import { SubResumeMenu } from "./ResumeMenu";
 import InlineRename from "./InlineRename";
 
 interface SubResumeRowProps {
   resume: SubResumeSummary;
-  isLast: boolean;
-  onEdit: (id: string) => void;
+  onOpen: (id: string) => void;
   onRequestRename: (id: string) => void;
   onDuplicate: (id: string) => void;
   onRequestDelete: (id: string) => void;
@@ -16,19 +14,19 @@ interface SubResumeRowProps {
   onCancelRename?: () => void;
 }
 
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return DATE_FORMATTER.format(new Date(dateStr));
 }
 
 export default function SubResumeRow({
   resume,
-  isLast,
-  onEdit,
+  onOpen,
   onRequestRename,
   onDuplicate,
   onRequestDelete,
@@ -37,52 +35,72 @@ export default function SubResumeRow({
   onCancelRename,
 }: SubResumeRowProps) {
   return (
-    <div className="flex items-center group transition-colors hover:bg-bg-elevated rounded-md -mx-2 px-2">
-      <TreeConnector isLast={isLast} />
+    <article className="rounded-[24px] border border-bg-border/75 bg-[linear-gradient(180deg,rgba(35,35,46,0.86),rgba(27,27,36,0.82))] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.18)] transition-colors hover:border-accent-amber/20">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="inline-flex items-center gap-2 rounded-full border border-bg-border/80 bg-bg-elevated/45 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-text-secondary/85">
+              <FileText size={12} className="text-accent-amber" />
+              Tailored Version
+            </div>
 
-      <div className="flex flex-1 items-center gap-3 py-2 min-w-0">
-        <FileText size={16} className="text-text-secondary shrink-0" />
-        {isRenaming && onRename && onCancelRename ? (
-          <div className="flex-1 min-w-0">
-            <InlineRename
-              value={resume.title}
-              onSave={(newTitle) => onRename(resume.id, newTitle)}
-              onCancel={onCancelRename}
+            {isRenaming && onRename && onCancelRename ? (
+              <div className="mt-3">
+                <InlineRename
+                  value={resume.title}
+                  onSave={(newTitle) => onRename(resume.id, newTitle)}
+                  onCancel={onCancelRename}
+                  className="text-base font-semibold"
+                />
+              </div>
+            ) : (
+              <>
+                <h4
+                  className="mt-3 truncate text-base font-semibold text-text-primary cursor-text"
+                  onDoubleClick={() => onRequestRename(resume.id)}
+                  title="Double-click to rename"
+                >
+                  {resume.title}
+                </h4>
+                <p className="mt-1 text-xs tabular-nums text-text-secondary">
+                  Updated {formatDate(resume.updatedAt)}
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onOpen(resume.id)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-accent-amber px-3.5 text-sm font-semibold text-bg-deep transition hover:brightness-110 cursor-pointer"
+              aria-label={`Open ${resume.title}`}
+            >
+              <ArrowUpRight size={14} />
+              Open
+            </button>
+            <button
+              type="button"
+              onClick={() => onRequestRename(resume.id)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-bg-border/80 bg-bg-elevated/45 px-3.5 text-sm font-medium text-text-primary transition-colors hover:border-accent-amber/30 hover:text-accent-amber cursor-pointer"
+              aria-label={`Rename ${resume.title}`}
+            >
+              <PencilLine size={14} />
+              Rename
+            </button>
+            <SubResumeMenu
+              onDuplicate={() => onDuplicate(resume.id)}
+              onDelete={() => onRequestDelete(resume.id)}
             />
           </div>
-        ) : (
-          <>
-            <span
-              className="text-sm text-text-primary truncate cursor-text hover:border-b hover:border-dashed hover:border-text-secondary/50"
-              onDoubleClick={() => onRequestRename(resume.id)}
-              title="Double-click to rename"
-            >
-              {resume.title}
-            </span>
-            <span className="text-xs text-text-secondary whitespace-nowrap ml-auto mr-2">
-              {formatDate(resume.updatedAt)}
-            </span>
-          </>
-        )}
-      </div>
+        </div>
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <button
-          type="button"
-          onClick={() => onEdit(resume.id)}
-          className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-text-secondary transition-colors hover:bg-bg-surface hover:text-accent-amber cursor-pointer"
-          aria-label={`Edit ${resume.title}`}
-          >
-            <Pencil size={12} />
-            Edit
-          </button>
-        <SubResumeMenu
-          onEdit={() => onEdit(resume.id)}
-          onRename={() => onRequestRename(resume.id)}
-          onDuplicate={() => onDuplicate(resume.id)}
-          onDelete={() => onRequestDelete(resume.id)}
-        />
+        {isRenaming && onRename && onCancelRename ? (
+          <div className="text-xs tabular-nums text-text-secondary">
+            Updated {formatDate(resume.updatedAt)}
+          </div>
+        ) : null}
       </div>
-    </div>
+    </article>
   );
 }

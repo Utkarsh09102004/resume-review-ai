@@ -197,7 +197,7 @@ export default function DashboardPageClient({
     ? `${pluralize(totalResumeDocuments, "resume document", "resume documents")} across ${pluralize(baseResumeCount, "base project", "base projects")}`
     : "Start a base resume here, then branch tailored versions as opportunities change.";
 
-  function handleEdit(id: string) {
+  function handleOpen(id: string) {
     router.push(`/editor/${id}`);
   }
 
@@ -223,7 +223,7 @@ export default function DashboardPageClient({
     const parent = resumes.find((r) => r.id === parentId);
     const defaultName = parent
       ? generateSubResumeTitle(parent.title, parent.subResumes.length)
-      : "Untitled Sub-Resume";
+      : "Untitled Tailored Version";
     setNameModal({ open: true, parentId, defaultName });
   }
 
@@ -289,7 +289,7 @@ export default function DashboardPageClient({
                     Base resume first
                   </div>
                   <div className="rounded-full border border-bg-border/80 bg-bg-elevated/60 px-3 py-2">
-                    Tailored versions attached underneath
+                    Tailored versions attached in each card
                   </div>
                   <div className="rounded-full border border-bg-border/80 bg-bg-elevated/60 px-3 py-2">
                     Continue from recent work
@@ -432,17 +432,17 @@ export default function DashboardPageClient({
                       </h3>
                     </div>
                     <p className="text-sm text-text-secondary">
-                      Base resumes stay visible first, with tailored versions
-                      nested underneath each project.
+                      Base resumes anchor each project card, with tailored
+                      versions attached inside a dedicated section.
                     </p>
                   </div>
 
-                  <div className="flex flex-col gap-4">
+                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                     {resumes.map((resume) => (
                       <ResumeGroupCard
                         key={resume.id}
                         resume={resume}
-                        onEdit={handleEdit}
+                        onOpen={handleOpen}
                         onRequestRename={handleRequestRename}
                         onDuplicate={handleDuplicate}
                         onCreateSubResume={handleCreateSubResume}
@@ -476,9 +476,15 @@ export default function DashboardPageClient({
         }
         onConfirm={handleNameModalConfirm}
         title={
-          nameModal.parentId ? "Name Your Sub-Resume" : "Name Your Resume"
+          nameModal.parentId ? "Name Your Tailored Version" : "Name Your Resume"
         }
         defaultName={nameModal.defaultName}
+        confirmLabel={
+          nameModal.parentId ? "Create tailored version" : "Create resume"
+        }
+        pendingLabel={
+          nameModal.parentId ? "Creating tailored version..." : "Creating resume..."
+        }
         isPending={isMutating}
       />
     </div>

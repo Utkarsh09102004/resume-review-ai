@@ -6,12 +6,14 @@ interface InlineRenameProps {
   value: string;
   onSave: (newTitle: string) => void;
   onCancel: () => void;
+  className?: string;
 }
 
 export default function InlineRename({
   value,
   onSave,
   onCancel,
+  className,
 }: InlineRenameProps) {
   const [text, setText] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +56,10 @@ export default function InlineRename({
       onChange={(e) => setText(e.target.value)}
       onKeyDown={handleKeyDown}
       onBlur={handleBlur}
-      className="w-full bg-transparent border-b-2 border-accent-amber px-0 py-0.5 text-sm font-semibold text-text-primary outline-none"
+      className={[
+        "w-full bg-transparent border-b border-accent-amber/80 px-0 py-1 text-sm font-semibold text-text-primary outline-none",
+        className ?? "",
+      ].join(" ")}
       aria-label="Rename"
     />
   );

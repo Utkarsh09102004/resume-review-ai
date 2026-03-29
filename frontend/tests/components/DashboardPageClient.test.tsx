@@ -135,7 +135,7 @@ describe("DashboardPageClient", () => {
     );
 
     expect(screen.getByText("Base Resumes")).toBeInTheDocument();
-    expect(screen.getByText("Tailored Versions")).toBeInTheDocument();
+    expect(screen.getAllByText("Tailored Versions").length).toBeGreaterThan(0);
     expect(screen.getByText("Recently Updated")).toBeInTheDocument();
     expect(screen.getByText("Controls Slot")).toBeInTheDocument();
     expect(screen.getByText("Resume library")).toBeInTheDocument();
@@ -158,6 +158,60 @@ describe("DashboardPageClient", () => {
     );
 
     expect(screen.getByText("My Resume")).toBeInTheDocument();
+    expect(screen.getAllByText("No tailored versions yet").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Open My Resume" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rename My Resume" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create tailored version" })).toBeInTheDocument();
+  });
+
+  it("renders tailored versions as attached cards with visible actions", () => {
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[
+          {
+            id: "r1",
+            title: "My Resume",
+            updatedAt: recentTimestamp,
+            subResumes: [
+              {
+                id: "r2",
+                title: "PM Resume",
+                updatedAt: recentTimestamp,
+              },
+            ],
+          },
+        ]}
+        initialError={null}
+      />
+    );
+
+    expect(screen.getByText("PM Resume")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Open / })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Rename PM Resume" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create tailored version" })).toBeInTheDocument();
+  });
+
+  it("opens the tailored version naming flow with updated copy", () => {
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[
+          {
+            id: "r1",
+            title: "My Resume",
+            updatedAt: recentTimestamp,
+            subResumes: [],
+          },
+        ]}
+        initialError={null}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create tailored version" }));
+
+    expect(screen.getByText("Name Your Tailored Version")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create tailored version" })).toBeInTheDocument();
   });
 
   it("creates a new resume through the server action and routes to the editor", async () => {

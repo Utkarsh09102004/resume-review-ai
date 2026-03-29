@@ -45,7 +45,7 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
         ref={buttonRef}
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-bg-elevated hover:text-text-primary cursor-pointer"
+        className="flex h-9 w-9 items-center justify-center rounded-xl border border-bg-border/70 bg-bg-elevated/55 text-text-secondary transition-colors hover:border-accent-amber/25 hover:text-text-primary cursor-pointer"
         aria-label="More actions"
         aria-expanded={open}
         aria-haspopup="menu"
@@ -55,7 +55,7 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
 
       {open ? (
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-40 rounded-lg border border-bg-border bg-bg-elevated py-1 shadow-xl animate-[fadeIn_150ms_ease-out]"
+          className="absolute right-0 top-full z-50 mt-2 w-44 rounded-2xl border border-bg-border/80 bg-bg-surface/95 p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
           role="menu"
         >
           {items.map((item) => (
@@ -67,7 +67,7 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
                 item.onSelect();
                 setOpen(false);
               }}
-              className={`flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-bg-surface cursor-pointer ${
+              className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-bg-elevated/80 cursor-pointer ${
                 item.tone === "danger" ? "text-status-error" : "text-text-primary"
               }`}
             >
@@ -81,27 +81,13 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
 }
 
 interface MainResumeMenuProps {
-  onEdit: () => void;
-  onRename: () => void;
-  onDuplicate: () => void;
-  onCreateSubResume: () => void;
   onDelete: () => void;
 }
 
-export function MainResumeMenu({
-  onEdit,
-  onRename,
-  onDuplicate,
-  onCreateSubResume,
-  onDelete,
-}: MainResumeMenuProps) {
+export function MainResumeMenu({ onDelete }: MainResumeMenuProps) {
   return (
     <ResumeMenu
       items={[
-        { label: "Edit", onSelect: onEdit },
-        { label: "Rename", onSelect: onRename },
-        { label: "Duplicate", onSelect: onDuplicate },
-        { label: "Create Sub-Resume", onSelect: onCreateSubResume },
         { label: "Delete", onSelect: onDelete, tone: "danger" },
       ]}
     />
@@ -109,23 +95,14 @@ export function MainResumeMenu({
 }
 
 interface SubResumeMenuProps {
-  onEdit: () => void;
-  onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
-export function SubResumeMenu({
-  onEdit,
-  onRename,
-  onDuplicate,
-  onDelete,
-}: SubResumeMenuProps) {
+export function SubResumeMenu({ onDuplicate, onDelete }: SubResumeMenuProps) {
   return (
     <ResumeMenu
       items={[
-        { label: "Edit", onSelect: onEdit },
-        { label: "Rename", onSelect: onRename },
         { label: "Duplicate", onSelect: onDuplicate },
         { label: "Delete", onSelect: onDelete, tone: "danger" },
       ]}

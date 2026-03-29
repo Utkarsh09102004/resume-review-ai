@@ -16,11 +16,11 @@ export function generateDefaultTitle(existingTitles: string[]): string {
 }
 
 /**
- * Generate a default title for a sub-resume based on its parent.
+ * Generate a default title for a tailored version based on its parent.
  */
 export function generateSubResumeTitle(
   parentTitle: string,
   siblingCount: number,
 ): string {
-  return `${parentTitle} - Variant ${siblingCount + 1}`;
+  return `${parentTitle} - Tailored Version ${siblingCount + 1}`;
 }

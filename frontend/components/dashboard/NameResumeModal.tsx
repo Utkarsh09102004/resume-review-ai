@@ -8,6 +8,8 @@ interface NameResumeModalProps {
   onConfirm: (name: string) => void;
   title: string;
   defaultName: string;
+  confirmLabel?: string;
+  pendingLabel?: string;
   isPending?: boolean;
 }
 
@@ -17,6 +19,8 @@ export default function NameResumeModal({
   onConfirm,
   title,
   defaultName,
+  confirmLabel = "Create",
+  pendingLabel = "Creating...",
   isPending = false,
 }: NameResumeModalProps) {
   const [name, setName] = useState(defaultName);
@@ -116,7 +120,7 @@ export default function NameResumeModal({
                 disabled={!isValid || isPending}
                 className="rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-bg-deep transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer"
               >
-                {isPending ? "Creating..." : "Create"}
+                {isPending ? pendingLabel : confirmLabel}
               </button>
             </div>
           </form>

@@ -168,26 +168,6 @@ describe('auth utilities', () => {
     });
   });
 
-  describe('getAuthAccessTokenForServer — auth enabled', () => {
-    it('prefers the primary server token helper when available', async () => {
-      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
-      const { getAuthAccessTokenForServer } = await import('@/lib/auth');
-      const token = await getAuthAccessTokenForServer();
-      expect(token).toBe('mock-token');
-      expect(mockGetAccessToken).toHaveBeenCalled();
-    });
-
-    it('falls back to the RSC token helper when the primary helper returns undefined', async () => {
-      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
-      mockGetAccessToken.mockResolvedValueOnce(undefined);
-      const { getAuthAccessTokenForServer } = await import('@/lib/auth');
-      const token = await getAuthAccessTokenForServer();
-      expect(token).toBe('mock-rsc-token');
-      expect(mockGetAccessToken).toHaveBeenCalled();
-      expect(mockGetAccessTokenRSC).toHaveBeenCalled();
-    });
-  });
-
   describe('getUserDisplayInfo — dev mode (auth disabled)', () => {
     it('returns a generic "User" name', async () => {
       delete process.env.NEXT_PUBLIC_AUTH_ENABLED;

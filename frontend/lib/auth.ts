@@ -129,22 +129,3 @@ export async function getAuthAccessTokenRSC(): Promise<string | undefined> {
     return undefined;
   }
 }
-
-/**
- * Resolve a Bearer access token for any server-side execution path.
- *
- * Server Actions and Route Handlers can use `getAccessToken`, while Server
- * Components require the RSC variant. Try both so protected backend calls
- * share one token lookup path regardless of the current server boundary.
- */
-export async function getAuthAccessTokenForServer(): Promise<
-  string | undefined
-> {
-  const token = await getAuthAccessToken();
-
-  if (token) {
-    return token;
-  }
-
-  return getAuthAccessTokenRSC();
-}

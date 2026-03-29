@@ -1,7 +1,7 @@
 import "server-only";
 
 import axios from "axios";
-import { createAuthenticatedApi } from "@/lib/api";
+import { createAuthenticatedApiRSC } from "@/lib/api";
 import type { ResumeFromAPI } from "@/lib/resumes";
 
 export interface EditorPageData {
@@ -10,7 +10,7 @@ export interface EditorPageData {
 }
 
 async function getResumeOrNull(id: string): Promise<ResumeFromAPI | null> {
-  const api = await createAuthenticatedApi();
+  const api = await createAuthenticatedApiRSC();
 
   try {
     const response = await api.get<ResumeFromAPI>(`/api/resumes/${id}`);

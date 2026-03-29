@@ -36,7 +36,7 @@ async function createApiWithToken(
 /**
  * Create an authenticated API client by attaching a Bearer token.
  *
- * Usage from Server Actions, Route Handlers, and Server Components:
+ * Usage from Server Actions and Route Handlers:
  *   const client = await createAuthenticatedApi();
  *   const res = await client.get('/resumes');
  *
@@ -44,15 +44,16 @@ async function createApiWithToken(
  * without an Authorization header — the backend defaults to a dev user.
  */
 export async function createAuthenticatedApi() {
-  const { getAuthAccessTokenForServer } = await import('./auth');
-  return createApiWithToken(getAuthAccessTokenForServer);
+  const { getAuthAccessToken } = await import('./auth');
+  return createApiWithToken(getAuthAccessToken);
 }
 
 /**
- * Backwards-compatible alias for callers that still import the RSC helper.
+ * Create an authenticated API client for React Server Components.
  */
 export async function createAuthenticatedApiRSC() {
-  return createAuthenticatedApi();
+  const { getAuthAccessTokenRSC } = await import('./auth');
+  return createApiWithToken(getAuthAccessTokenRSC);
 }
 
 export default api;

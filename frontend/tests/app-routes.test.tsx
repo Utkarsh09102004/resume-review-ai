@@ -31,6 +31,7 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/api", () => ({
   createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
+  createAuthenticatedApiRSC: () => mockCreateAuthenticatedApi(),
 }));
 
 vi.mock("next/navigation", () => ({

@@ -5,6 +5,7 @@ const mockCreateAuthenticatedApi = vi.fn(async () => ({ get: mockGet }));
 
 vi.mock("@/lib/api", () => ({
   createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
+  createAuthenticatedApiRSC: () => mockCreateAuthenticatedApi(),
 }));
 
 describe("dashboard route loader", () => {

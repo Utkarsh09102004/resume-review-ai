@@ -64,32 +64,24 @@ describe('createAuthenticatedApi', () => {
     const { createAuthenticatedApi } = await import('@/lib/api');
     const client = await createAuthenticatedApi();
     expect(client.defaults.headers?.Authorization).toBe('Bearer mock-token');
+    expect(mockGetAccessToken).toHaveBeenCalledTimes(1);
+    expect(mockGetAccessTokenRSC).not.toHaveBeenCalled();
   });
 
-  it('falls back to the RSC token helper when the primary server token lookup is unavailable', async () => {
+  it('returns plain client when the server token helper does not resolve a token', async () => {
     process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
     mockGetAccessToken.mockResolvedValueOnce(undefined);
 
     const { createAuthenticatedApi } = await import('@/lib/api');
     const client = await createAuthenticatedApi();
 
-    expect(client.defaults.headers?.Authorization).toBe('Bearer mock-rsc-token');
-  });
-
-  it('returns plain client when auth is enabled but no token is available from either server helper', async () => {
-    process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
-    mockGetAccessToken.mockResolvedValueOnce(undefined);
-    mockGetAccessTokenRSC.mockResolvedValueOnce(undefined);
-
-    const { createAuthenticatedApi } = await import('@/lib/api');
-    const client = await createAuthenticatedApi();
-    // Should fall back to plain client
     expect(client.defaults.baseURL).toBe('http://localhost:8000');
-    // Should not have Authorization header set
     const authHeader =
       client.defaults.headers?.Authorization ??
       client.defaults.headers?.common?.Authorization;
     expect(authHeader).toBeUndefined();
+    expect(mockGetAccessToken).toHaveBeenCalledTimes(1);
+    expect(mockGetAccessTokenRSC).not.toHaveBeenCalled();
   });
 });
 
@@ -112,9 +104,26 @@ describe('createAuthenticatedApiRSC', () => {
 
   it('returns authenticated client with Bearer token when auth is enabled in RSC', async () => {
     process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
-    mockGetAccessToken.mockResolvedValueOnce(undefined);
     const { createAuthenticatedApiRSC } = await import('@/lib/api');
     const client = await createAuthenticatedApiRSC();
     expect(client.defaults.headers?.Authorization).toBe('Bearer mock-rsc-token');
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+    expect(mockGetAccessTokenRSC).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns plain client when the RSC token helper does not resolve a token', async () => {
+    process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+    mockGetAccessTokenRSC.mockResolvedValueOnce(undefined);
+
+    const { createAuthenticatedApiRSC } = await import('@/lib/api');
+    const client = await createAuthenticatedApiRSC();
+
+    expect(client.defaults.baseURL).toBe('http://localhost:8000');
+    const authHeader =
+      client.defaults.headers?.Authorization ??
+      client.defaults.headers?.common?.Authorization;
+    expect(authHeader).toBeUndefined();
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+    expect(mockGetAccessTokenRSC).toHaveBeenCalledTimes(1);
   });
 });

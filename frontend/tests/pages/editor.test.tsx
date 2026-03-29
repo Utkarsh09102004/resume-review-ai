@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, act } from "@testing-library/react";
 import React from "react";
+import EditorPageClient from "@/components/editor/EditorPageClient";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -52,20 +53,12 @@ vi.mock("@/components/editor/SplitPane", () => ({
     React.createElement("div", null, left, right),
 }));
 
-import EditorPage from "@/app/editor/[id]/page";
-
 // ---------------------------------------------------------------------------
-// Helper — render with pre-resolved params to avoid Suspense issues
+// Helper
 // ---------------------------------------------------------------------------
 
 function renderEditor() {
-  // Pre-resolve the params promise so use() doesn't suspend
-  const resolvedParams = Promise.resolve({ id: "test-id" });
-  return render(
-    <React.Suspense fallback={<div>Suspense loading...</div>}>
-      <EditorPage params={resolvedParams} />
-    </React.Suspense>,
-  );
+  return render(<EditorPageClient resumeId="test-id" user={{ name: "User" }} />);
 }
 
 // ---------------------------------------------------------------------------

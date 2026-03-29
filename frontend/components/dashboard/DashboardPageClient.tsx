@@ -9,15 +9,18 @@ import NewResumeButton from "@/components/dashboard/NewResumeButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import NameResumeModal from "@/components/dashboard/NameResumeModal";
 import { useResumes } from "@/hooks/useResumes";
-import { useUser } from "@/components/UserProvider";
 import {
   generateDefaultTitle,
   generateSubResumeTitle,
 } from "@/lib/resumeDefaults";
+import type { UserDisplayInfo } from "@/lib/auth";
 
-export default function DashboardPage() {
+export default function DashboardPageClient({
+  user,
+}: {
+  user: UserDisplayInfo;
+}) {
   const router = useRouter();
-  const user = useUser();
   const {
     resumes,
     loading,
@@ -43,7 +46,7 @@ export default function DashboardPage() {
     defaultName: string;
   }>({ open: false, parentId: null, defaultName: "" });
 
-  async function handleEdit(id: string) {
+  function handleEdit(id: string) {
     router.push(`/editor/${id}`);
   }
 
@@ -87,7 +90,6 @@ export default function DashboardPage() {
         ? generateSubResumeTitle(parent.title, parent.subResumes.length)
         : "Untitled Sub-Resume";
       setNameModal({ open: true, parentId: id, defaultName });
-      return;
     }
   }
 
@@ -106,6 +108,7 @@ export default function DashboardPage() {
 
   async function handleNameModalConfirm(name: string) {
     if (isCreating) return;
+
     try {
       setIsCreating(true);
       setNameModal({ open: false, parentId: null, defaultName: "" });
@@ -142,10 +145,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen flex-col">
-      <Toolbar
-        user={user ?? undefined}
-        actions={<NewResumeButton onClick={handleNewResume} />}
-      />
+      <Toolbar user={user} actions={<NewResumeButton onClick={handleNewResume} />} />
 
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
@@ -174,7 +174,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => window.location.reload()}
-                  className="text-sm text-accent-amber hover:underline cursor-pointer"
+                  className="cursor-pointer text-sm text-accent-amber hover:underline"
                 >
                   Try again
                 </button>

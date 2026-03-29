@@ -2,6 +2,8 @@ import {
   getLogtoContext,
   getAccessToken,
 } from '@logto/next/server-actions';
+import { redirect } from 'next/navigation';
+import { cache } from 'react';
 import { logtoConfig } from './logto';
 
 /**
@@ -12,15 +14,7 @@ export function isAuthEnabled(): boolean {
   return process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
 }
 
-/**
- * Get the current user's authentication context.
- *
- * In dev mode (AUTH_ENABLED != "true"), returns a fake authenticated context
- * so the app is usable without a running Logto instance.
- *
- * Call this from Server Components or Server Actions only.
- */
-export async function getAuthContext() {
+const getCachedAuthContext = cache(async () => {
   if (!isAuthEnabled()) {
     return {
       isAuthenticated: true,
@@ -36,6 +30,18 @@ export async function getAuthContext() {
   }
 
   return getLogtoContext(logtoConfig);
+});
+
+/**
+ * Get the current user's authentication context.
+ *
+ * In dev mode (AUTH_ENABLED != "true"), returns a fake authenticated context
+ * so the app is usable without a running Logto instance.
+ *
+ * Call this from Server Components or Server Actions only.
+ */
+export async function getAuthContext() {
+  return getCachedAuthContext();
 }
 
 /**
@@ -59,7 +65,7 @@ export async function getUserDisplayInfo(): Promise<UserDisplayInfo | null> {
     return { name: 'User' };
   }
 
-  const ctx = await getLogtoContext(logtoConfig);
+  const ctx = await getCachedAuthContext();
   if (!ctx.isAuthenticated || !ctx.claims) {
     return null;
   }
@@ -73,6 +79,16 @@ export async function getUserDisplayInfo(): Promise<UserDisplayInfo | null> {
     typeof claims.picture === 'string' ? claims.picture : undefined;
 
   return { name, avatarUrl };
+}
+
+export async function requireUserDisplayInfo(): Promise<UserDisplayInfo> {
+  const user = await getUserDisplayInfo();
+
+  if (!user) {
+    redirect('/api/logto/sign-in');
+  }
+
+  return user;
 }
 
 /**

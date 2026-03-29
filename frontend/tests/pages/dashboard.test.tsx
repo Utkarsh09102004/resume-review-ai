@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import DashboardPageClient from "@/components/dashboard/DashboardPageClient";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -26,8 +27,6 @@ let mockHookReturn = {
 vi.mock("@/hooks/useResumes", () => ({
   useResumes: () => mockHookReturn,
 }));
-
-import DashboardPage from "@/app/dashboard/page";
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -62,14 +61,14 @@ describe("DashboardPage", () => {
 
   it("shows loading state", () => {
     mockHookReturn.loading = true;
-    render(<DashboardPage />);
+    render(<DashboardPageClient user={{ name: "User" }} />);
     expect(screen.getByText("Loading resumes...")).toBeInTheDocument();
   });
 
   it("shows error state", () => {
     mockHookReturn.loading = false;
     mockHookReturn.error = "Failed to load resumes";
-    render(<DashboardPage />);
+    render(<DashboardPageClient user={{ name: "User" }} />);
     expect(screen.getByText("Failed to load resumes")).toBeInTheDocument();
     expect(screen.getByText("Try again")).toBeInTheDocument();
   });
@@ -77,7 +76,7 @@ describe("DashboardPage", () => {
   it("shows empty state when no resumes", () => {
     mockHookReturn.loading = false;
     mockHookReturn.resumes = [];
-    render(<DashboardPage />);
+    render(<DashboardPageClient user={{ name: "User" }} />);
     expect(screen.getByText("No resumes yet")).toBeInTheDocument();
   });
 
@@ -92,7 +91,7 @@ describe("DashboardPage", () => {
         subResumes: [],
       },
     ];
-    render(<DashboardPage />);
+    render(<DashboardPageClient user={{ name: "User" }} />);
     expect(screen.getByText("My Resume")).toBeInTheDocument();
   });
 });

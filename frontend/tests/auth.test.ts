@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
+const mockRedirect = vi.fn();
+
 // Keep references to mocks so we can override per-test
 const mockGetAccessToken = vi.fn(async () => 'mock-token');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,12 +19,25 @@ vi.mock('@logto/next/server-actions', () => ({
   handleSignIn: vi.fn(),
 }));
 
+vi.mock('next/navigation', () => ({
+  redirect: (...args: unknown[]) => {
+    mockRedirect(...args);
+    throw new Error('NEXT_REDIRECT');
+  },
+}));
+
 describe('auth utilities', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     vi.resetModules();
     process.env = { ...originalEnv };
+    mockRedirect.mockClear();
+    mockGetLogtoContext.mockReset();
+    mockGetLogtoContext.mockResolvedValue({
+      isAuthenticated: true,
+      claims: { sub: 'real-user' },
+    });
     mockGetAccessToken.mockResolvedValue('mock-token');
   });
 
@@ -170,6 +185,31 @@ describe('auth utilities', () => {
       const { getUserDisplayInfo } = await import('@/lib/auth');
       const info = await getUserDisplayInfo();
       expect(info).toBeNull();
+    });
+  });
+
+  describe('requireUserDisplayInfo', () => {
+    it('returns the resolved user when authenticated', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetLogtoContext.mockResolvedValueOnce({
+        isAuthenticated: true,
+        claims: { sub: 'u1', name: 'Alice' },
+      });
+      const { requireUserDisplayInfo } = await import('@/lib/auth');
+      const info = await requireUserDisplayInfo();
+      expect(info).toEqual({ name: 'Alice', avatarUrl: undefined });
+    });
+
+    it('redirects to sign-in when auth is enabled and no user is available', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetLogtoContext.mockResolvedValueOnce({
+        isAuthenticated: false,
+        claims: undefined,
+      });
+
+      const { requireUserDisplayInfo } = await import('@/lib/auth');
+      await expect(requireUserDisplayInfo()).rejects.toThrow('NEXT_REDIRECT');
+      expect(mockRedirect).toHaveBeenCalledWith('/api/logto/sign-in');
     });
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, use } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Toolbar from "@/components/Toolbar";
 import StatusPill from "@/components/StatusPill";
@@ -10,26 +10,24 @@ import PreviewPanel from "@/components/editor/PreviewPanel";
 import ErrorPanel from "@/components/editor/ErrorPanel";
 import { useResumeEditor } from "@/hooks/useResumeEditor";
 import { useCompiler } from "@/hooks/useCompiler";
-import { useUser } from "@/components/UserProvider";
 import api from "@/lib/api";
+import type { UserDisplayInfo } from "@/lib/auth";
 
-export default function EditorPage({
-  params,
+export default function EditorPageClient({
+  resumeId,
+  user,
 }: {
-  params: Promise<{ id: string }>;
+  resumeId: string;
+  user: UserDisplayInfo;
 }) {
-  const { id } = use(params);
   const router = useRouter();
-  const user = useUser();
   const { resume, parentResume, loading, notFound, error, isSaving, save } =
-    useResumeEditor(id);
+    useResumeEditor(resumeId);
 
   const [latex, setLatex] = useState<string | null>(null);
   const [errorsExpanded, setErrorsExpanded] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Derive current LaTeX: user edits (latex) take priority, otherwise fall back
-  // to the loaded resume source. No useEffect needed — null means "not yet edited".
   const currentLatex = latex ?? resume?.latex_source ?? "";
 
   const {
@@ -40,12 +38,12 @@ export default function EditorPage({
   } = useCompiler(currentLatex);
 
   const handleLineClick = useCallback((line: number) => {
-    // Could scroll CodeMirror to line in the future
     console.log("Navigate to line:", line);
   }, []);
 
   const handleSave = useCallback(async () => {
     if (!resume || latex === null) return;
+
     try {
       setSaveError(null);
       await save({ latex_source: latex });
@@ -86,19 +84,20 @@ export default function EditorPage({
         setSaveError("Failed to rename");
       }
     },
-    [save],
+    [save]
   );
 
-  // Build breadcrumb
   const breadcrumb: {
     label: string;
     href?: string;
     editable?: boolean;
     onRename?: (newTitle: string) => void;
   }[] = [{ label: "Dashboard", href: "/dashboard" }];
+
   if (parentResume) {
     breadcrumb.push({ label: parentResume.title });
   }
+
   if (resume) {
     breadcrumb.push({
       label: resume.title,
@@ -107,20 +106,17 @@ export default function EditorPage({
     });
   }
 
-  // Map compile status to StatusPill status
   const pillStatus: "compiling" | "compiled" | "error" =
     compileStatus === "compiling"
       ? "compiling"
       : compileStatus === "error"
         ? "error"
-        : compileStatus === "compiled"
-          ? "compiled"
-          : "compiled";
+        : "compiled";
 
   if (loading) {
     return (
       <div className="flex h-screen flex-col">
-        <Toolbar user={user ?? undefined} />
+        <Toolbar user={user} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-bg-border border-t-accent-amber" />
@@ -134,7 +130,7 @@ export default function EditorPage({
   if (notFound) {
     return (
       <div className="flex h-screen flex-col">
-        <Toolbar user={user ?? undefined} />
+        <Toolbar user={user} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-center">
             <p className="text-lg font-semibold text-text-primary">
@@ -146,7 +142,7 @@ export default function EditorPage({
             <button
               type="button"
               onClick={() => router.push("/dashboard")}
-              className="mt-2 text-sm text-accent-amber hover:underline cursor-pointer"
+              className="mt-2 cursor-pointer text-sm text-accent-amber hover:underline"
             >
               Back to Dashboard
             </button>
@@ -159,14 +155,14 @@ export default function EditorPage({
   if (error) {
     return (
       <div className="flex h-screen flex-col">
-        <Toolbar user={user ?? undefined} />
+        <Toolbar user={user} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-center">
             <p className="text-sm text-status-error">{error}</p>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="text-sm text-accent-amber hover:underline cursor-pointer"
+              className="cursor-pointer text-sm text-accent-amber hover:underline"
             >
               Try again
             </button>
@@ -180,43 +176,41 @@ export default function EditorPage({
     <div className="flex h-screen flex-col">
       <Toolbar
         breadcrumb={breadcrumb}
-        user={user ?? undefined}
+        user={user}
         actions={
           <div className="flex items-center gap-2">
-            {saveError && (
+            {saveError ? (
               <span className="text-xs text-status-error">{saveError}</span>
-            )}
+            ) : null}
             <button
               type="button"
               onClick={handleSave}
               disabled={isSaving}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-bg-border px-3 text-xs font-medium text-text-secondary transition-colors hover:border-accent-amber hover:text-accent-amber disabled:opacity-50 cursor-pointer"
+              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-bg-border px-3 text-xs font-medium text-text-secondary transition-colors hover:border-accent-amber hover:text-accent-amber disabled:opacity-50"
             >
               {isSaving ? "Saving..." : "Save"}
             </button>
             <button
               type="button"
               onClick={handleDownload}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-accent-amber px-3 text-xs font-semibold text-bg-deep transition-opacity hover:opacity-90 cursor-pointer"
+              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-accent-amber px-3 text-xs font-semibold text-bg-deep transition-opacity hover:opacity-90"
             >
               Download PDF
             </button>
           </div>
         }
       >
-        {compileStatus !== "idle" && (
+        {compileStatus !== "idle" ? (
           <StatusPill
             status={pillStatus}
             compiledAgo={compiledAgo}
             errorCount={compileErrors.length}
             onErrorClick={() => setErrorsExpanded(!errorsExpanded)}
           />
-        )}
+        ) : null}
       </Toolbar>
 
-      {/* Main editor area */}
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-        {/* Desktop: split pane layout */}
         <div className="hidden md:flex md:flex-1 md:flex-col md:overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <SplitPane
@@ -239,7 +233,6 @@ export default function EditorPage({
           </div>
         </div>
 
-        {/* Mobile: stacked fallback */}
         <div className="flex flex-1 flex-col overflow-hidden md:hidden">
           <div className="flex-1 overflow-hidden">
             <EditorPanel value={currentLatex} onChange={setLatex} />

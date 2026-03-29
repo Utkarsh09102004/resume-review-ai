@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { JetBrains_Mono } from "next/font/google";
-import { getUserDisplayInfo } from "@/lib/auth";
-import { UserProvider } from "@/components/UserProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,20 +23,18 @@ export const metadata: Metadata = {
   description: "AI-powered LaTeX resume editor",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getUserDisplayInfo();
-
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-bg-deep text-text-primary">
-        <UserProvider user={user}>{children}</UserProvider>
+        {children}
       </body>
     </html>
   );

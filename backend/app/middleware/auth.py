@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import time
 from typing import Any
 
@@ -8,23 +10,37 @@ from jose import JWTError, jwt
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 security = HTTPBearer(auto_error=False)
 
 _jwks_cache: dict[str, Any] | None = None
 _jwks_cache_time: float = 0
 _JWKS_CACHE_TTL: int = 3600  # 1 hour
+_jwks_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def _get_jwks(force_refresh: bool = False) -> dict[str, Any]:
     global _jwks_cache, _jwks_cache_time
     now = time.time()
-    if _jwks_cache is None or force_refresh or (now - _jwks_cache_time) > _JWKS_CACHE_TTL:
+
+    # Fast path: cache is valid, no refresh forced
+    if not force_refresh and _jwks_cache is not None and (now - _jwks_cache_time) <= _JWKS_CACHE_TTL:
+        return _jwks_cache
+
+    # Slow path: acquire lock, re-check, then fetch
+    async with _jwks_lock:
+        now = time.time()
+        if not force_refresh and _jwks_cache is not None and (now - _jwks_cache_time) <= _JWKS_CACHE_TTL:
+            return _jwks_cache
+
         async with httpx.AsyncClient() as client:
             resp = await client.get(settings.LOGTO_JWKS_URL)
             resp.raise_for_status()
-            _jwks_cache = resp.json()
-            _jwks_cache_time = now
-    return _jwks_cache
+            fetched: dict[str, Any] = resp.json()
+            _jwks_cache = fetched
+            _jwks_cache_time = time.time()
+            return fetched
 
 
 async def get_current_user(
@@ -63,9 +79,11 @@ async def get_current_user(
                 detail="Unable to find appropriate key",
             )
 
-        decode_options = {"verify_aud": False}
+        decode_options: dict[str, bool] = {"verify_aud": False}
         if settings.LOGTO_APP_ID:
             decode_options = {"verify_aud": True}
+        else:
+            logger.warning("LOGTO_APP_ID is empty — JWT audience verification is disabled")
 
         payload = jwt.decode(
             token,

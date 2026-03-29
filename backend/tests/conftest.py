@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("AUTH_ENABLED", "false")
+
 from collections.abc import AsyncGenerator
 
 import pytest

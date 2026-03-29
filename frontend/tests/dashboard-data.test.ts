@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGet = vi.fn();
-const mockCreateAuthenticatedApiRSC = vi.fn(async () => ({ get: mockGet }));
+const mockCreateAuthenticatedApi = vi.fn(async () => ({ get: mockGet }));
 
 vi.mock("@/lib/api", () => ({
-  createAuthenticatedApiRSC: () => mockCreateAuthenticatedApiRSC(),
+  createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
 }));
 
 describe("dashboard route loader", () => {
@@ -12,7 +12,7 @@ describe("dashboard route loader", () => {
     vi.clearAllMocks();
   });
 
-  it("loads resume groups through the RSC-authenticated API client", async () => {
+  it("loads resume groups through the shared authenticated API client", async () => {
     mockGet.mockResolvedValue({
       data: [
         {
@@ -58,7 +58,7 @@ describe("dashboard route loader", () => {
       error: null,
     });
 
-    expect(mockCreateAuthenticatedApiRSC).toHaveBeenCalledTimes(1);
+    expect(mockCreateAuthenticatedApi).toHaveBeenCalledTimes(1);
     expect(mockGet).toHaveBeenCalledWith("/api/resumes/");
   });
 

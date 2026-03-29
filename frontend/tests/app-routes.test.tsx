@@ -4,7 +4,7 @@ import React from "react";
 
 const mockRequireUserDisplayInfo = vi.fn(async () => ({ name: "Alice" }));
 const mockDashboardGet = vi.fn();
-const mockCreateAuthenticatedApiRSC = vi.fn(async () => ({ get: mockDashboardGet }));
+const mockCreateAuthenticatedApi = vi.fn(async () => ({ get: mockDashboardGet }));
 const mockDashboardClient = vi.fn<(props: unknown) => void>();
 const mockEditorWorkspace = vi.fn<(props: unknown) => void>();
 const mockGetEditorPageData = vi.fn<
@@ -30,7 +30,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  createAuthenticatedApiRSC: () => mockCreateAuthenticatedApiRSC(),
+  createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
 }));
 
 vi.mock("next/navigation", () => ({

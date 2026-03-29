@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createAuthenticatedApiRSC } from "@/lib/api";
+import { createAuthenticatedApi } from "@/lib/api";
 import { groupResumes } from "@/lib/resumes";
 import type { ResumeFromAPI, ResumeGroup } from "@/lib/resumes";
 
@@ -11,7 +11,7 @@ export interface DashboardPageData {
 
 export async function getDashboardPageData(): Promise<DashboardPageData> {
   try {
-    const client = await createAuthenticatedApiRSC();
+    const client = await createAuthenticatedApi();
     const response = await client.get<ResumeFromAPI[]>("/api/resumes/");
 
     return {

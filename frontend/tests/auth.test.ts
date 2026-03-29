@@ -3,8 +3,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 const mockRedirect = vi.fn();
 
 // Keep references to mocks so we can override per-test
-const mockGetAccessToken = vi.fn(async () => 'mock-token');
-const mockGetAccessTokenRSC = vi.fn(async () => 'mock-rsc-token');
+const mockGetAccessToken = vi.fn<() => Promise<string | undefined>>(
+  async () => 'mock-token'
+);
+const mockGetAccessTokenRSC = vi.fn<() => Promise<string | undefined>>(
+  async () => 'mock-rsc-token'
+);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockGetLogtoContext = vi.fn<any>(async () => ({
   isAuthenticated: true as boolean,
@@ -161,6 +165,26 @@ describe('auth utilities', () => {
       const { getAuthAccessTokenRSC } = await import('@/lib/auth');
       const token = await getAuthAccessTokenRSC();
       expect(token).toBeUndefined();
+    });
+  });
+
+  describe('getAuthAccessTokenForServer — auth enabled', () => {
+    it('prefers the primary server token helper when available', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      const { getAuthAccessTokenForServer } = await import('@/lib/auth');
+      const token = await getAuthAccessTokenForServer();
+      expect(token).toBe('mock-token');
+      expect(mockGetAccessToken).toHaveBeenCalled();
+    });
+
+    it('falls back to the RSC token helper when the primary helper returns undefined', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetAccessToken.mockResolvedValueOnce(undefined);
+      const { getAuthAccessTokenForServer } = await import('@/lib/auth');
+      const token = await getAuthAccessTokenForServer();
+      expect(token).toBe('mock-rsc-token');
+      expect(mockGetAccessToken).toHaveBeenCalled();
+      expect(mockGetAccessTokenRSC).toHaveBeenCalled();
     });
   });
 

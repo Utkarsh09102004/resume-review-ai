@@ -1,13 +1,20 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
+const mockGetAccessToken = vi.fn<() => Promise<string | undefined>>(
+  async () => 'mock-token'
+);
+const mockGetAccessTokenRSC = vi.fn<() => Promise<string | undefined>>(
+  async () => 'mock-rsc-token'
+);
+
 // Mock @logto/next/server-actions before any imports
 vi.mock('@logto/next/server-actions', () => ({
   getLogtoContext: vi.fn(async () => ({
     isAuthenticated: true,
     claims: { sub: 'real-user' },
   })),
-  getAccessToken: vi.fn(async () => 'mock-token'),
-  getAccessTokenRSC: vi.fn(async () => 'mock-rsc-token'),
+  getAccessToken: () => mockGetAccessToken(),
+  getAccessTokenRSC: () => mockGetAccessTokenRSC(),
   signIn: vi.fn(),
   signOut: vi.fn(),
   handleSignIn: vi.fn(),
@@ -32,6 +39,10 @@ describe('createAuthenticatedApi', () => {
     vi.resetModules();
     vi.doUnmock('@/lib/auth');
     process.env = { ...originalEnv };
+    mockGetAccessToken.mockReset();
+    mockGetAccessTokenRSC.mockReset();
+    mockGetAccessToken.mockResolvedValue('mock-token');
+    mockGetAccessTokenRSC.mockResolvedValue('mock-rsc-token');
   });
 
   afterEach(() => {
@@ -55,15 +66,20 @@ describe('createAuthenticatedApi', () => {
     expect(client.defaults.headers?.Authorization).toBe('Bearer mock-token');
   });
 
-  it('returns plain client when auth is enabled but no token available', async () => {
+  it('falls back to the RSC token helper when the primary server token lookup is unavailable', async () => {
     process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+    mockGetAccessToken.mockResolvedValueOnce(undefined);
 
-    // Mock getAuthAccessToken to return undefined (e.g., expired session)
-    vi.doMock('@/lib/auth', () => ({
-      isAuthEnabled: () => true,
-      getAuthAccessToken: async () => undefined,
-      getAuthAccessTokenRSC: async () => undefined,
-    }));
+    const { createAuthenticatedApi } = await import('@/lib/api');
+    const client = await createAuthenticatedApi();
+
+    expect(client.defaults.headers?.Authorization).toBe('Bearer mock-rsc-token');
+  });
+
+  it('returns plain client when auth is enabled but no token is available from either server helper', async () => {
+    process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+    mockGetAccessToken.mockResolvedValueOnce(undefined);
+    mockGetAccessTokenRSC.mockResolvedValueOnce(undefined);
 
     const { createAuthenticatedApi } = await import('@/lib/api');
     const client = await createAuthenticatedApi();
@@ -84,6 +100,10 @@ describe('createAuthenticatedApiRSC', () => {
     vi.resetModules();
     vi.doUnmock('@/lib/auth');
     process.env = { ...originalEnv };
+    mockGetAccessToken.mockReset();
+    mockGetAccessTokenRSC.mockReset();
+    mockGetAccessToken.mockResolvedValue('mock-token');
+    mockGetAccessTokenRSC.mockResolvedValue('mock-rsc-token');
   });
 
   afterEach(() => {
@@ -92,6 +112,7 @@ describe('createAuthenticatedApiRSC', () => {
 
   it('returns authenticated client with Bearer token when auth is enabled in RSC', async () => {
     process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+    mockGetAccessToken.mockResolvedValueOnce(undefined);
     const { createAuthenticatedApiRSC } = await import('@/lib/api');
     const client = await createAuthenticatedApiRSC();
     expect(client.defaults.headers?.Authorization).toBe('Bearer mock-rsc-token');

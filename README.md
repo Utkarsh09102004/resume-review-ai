@@ -13,22 +13,25 @@ AI-powered LaTeX resume editor with live PDF preview.
 ## Quick Start
 
 ```bash
-# 1. Infrastructure (PostgreSQL + TeXLive)
+# 1. Install dependencies from lockfiles
+make setup
+
+# 2. Infrastructure (PostgreSQL + TeXLive)
 docker compose -f docker-compose.dev.yml up -d
 
-# 2. Backend
+# 3. Backend
 cd backend
-uv sync
 uv run alembic upgrade head
 AUTH_ENABLED=false uv run uvicorn app.main:app --reload --port 8000
 
-# 3. Frontend (in another terminal)
+# 4. Frontend (in another terminal)
 cd frontend
-npm install
 npm run dev
 ```
 
 Visit http://localhost:3000.
+
+Run `make check` from the repo root after setup to verify the backend and frontend lint/typecheck baseline.
 
 ## Documentation
 

@@ -106,6 +106,8 @@ export default function Toolbar({
             title={user.name}
           >
             {user.avatarUrl ? (
+              // External IdP avatars can come from arbitrary hosts, so keep a plain img here.
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={user.avatarUrl}
                 alt={user.name}

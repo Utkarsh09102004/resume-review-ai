@@ -3,7 +3,7 @@ title: Development Setup Guide
 category: guide
 status: current
 relates_to: [docs/specs/architecture.md, docs/runbooks/deployment.md]
-last_verified: 2026-03-20
+last_verified: 2026-03-29
 ---
 
 # Development Setup Guide
@@ -38,7 +38,19 @@ cd resume-review-ai
 cp .env.example .env
 ```
 
-### 2. Start infrastructure containers
+### 2. Install local dependencies
+
+```bash
+make setup
+```
+
+This installs:
+- Backend dependencies with `uv sync`
+- Frontend dependencies with `npm ci` from the committed `package-lock.json`
+
+Re-run `make setup` whenever backend dependencies or the frontend lockfile change.
+
+### 3. Start infrastructure containers
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d
@@ -54,11 +66,10 @@ docker compose -f docker-compose.dev.yml ps
 curl http://localhost:3001/health
 ```
 
-### 3. Backend
+### 4. Backend
 
 ```bash
 cd backend
-uv sync                    # install Python dependencies
 uv run alembic upgrade head # run database migrations
 AUTH_ENABLED=false uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -66,11 +77,10 @@ AUTH_ENABLED=false uv run uvicorn app.main:app --reload --port 8000
 - API docs at http://localhost:8000/docs (Swagger UI)
 - Health check: `curl http://localhost:8000/health`
 
-### 4. Frontend
+### 5. Frontend
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
@@ -82,6 +92,7 @@ npm run dev
 All checks must pass before committing. Run from the repo root:
 
 ```bash
+make setup       # clean-clone bootstrap: uv sync + npm ci
 make check       # run everything: ruff + eslint + mypy + tsc
 make lint        # linting only (ruff + eslint)
 make typecheck   # type checking only (mypy + tsc)
@@ -111,6 +122,7 @@ uv run mypy app/          # type check
 
 ```bash
 cd frontend
+npm ci                    # lockfile-based install for clean clones/CI
 npm run lint              # eslint
 npm run typecheck         # tsc --noEmit
 ```
@@ -238,4 +250,5 @@ The tmpfs mount needs `uid=1001,gid=1001` to match the container's `compiler` us
 Run alembic from the `backend/` directory. The `prepend_sys_path = .` in `alembic.ini` handles the module path.
 
 **Frontend build fails:**
+Run `make setup` again to restore the locked frontend toolchain, then retry `make check` or `npm run dev`.
 Make sure you're using Node 20+. Run `npm install` first.

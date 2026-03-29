@@ -77,15 +77,34 @@ export default function EditorPage({
     }
   };
 
+  const handleTitleRename = useCallback(
+    async (newTitle: string) => {
+      try {
+        setSaveError(null);
+        await save({ title: newTitle });
+      } catch {
+        setSaveError("Failed to rename");
+      }
+    },
+    [save],
+  );
+
   // Build breadcrumb
-  const breadcrumb: { label: string; href?: string }[] = [
-    { label: "Dashboard", href: "/dashboard" },
-  ];
+  const breadcrumb: {
+    label: string;
+    href?: string;
+    editable?: boolean;
+    onRename?: (newTitle: string) => void;
+  }[] = [{ label: "Dashboard", href: "/dashboard" }];
   if (parentResume) {
     breadcrumb.push({ label: parentResume.title });
   }
   if (resume) {
-    breadcrumb.push({ label: resume.title });
+    breadcrumb.push({
+      label: resume.title,
+      editable: true,
+      onRename: handleTitleRename,
+    });
   }
 
   // Map compile status to StatusPill status

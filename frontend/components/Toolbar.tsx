@@ -1,10 +1,13 @@
 "use client";
 
 import { type ReactNode } from "react";
+import EditableTitle from "@/components/editor/EditableTitle";
 
 interface BreadcrumbItem {
   label: string;
   href?: string;
+  editable?: boolean;
+  onRename?: (newTitle: string) => void;
 }
 
 interface ToolbarUser {
@@ -66,7 +69,12 @@ export default function Toolbar({
                 <span className="text-text-secondary text-xs" aria-hidden="true">
                   /
                 </span>
-                {item.href ? (
+                {item.editable && item.onRename ? (
+                  <EditableTitle
+                    value={item.label}
+                    onSave={item.onRename}
+                  />
+                ) : item.href ? (
                   <a
                     href={item.href}
                     className="text-xs text-text-secondary hover:text-text-primary transition-colors truncate"

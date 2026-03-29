@@ -65,8 +65,16 @@ export default function ResumeGroupCard({
             />
           ) : (
             <>
-              <h3 className="text-sm font-semibold text-text-primary truncate">
-                {resume.title}
+              <h3
+                className="group/title inline-flex items-center gap-1 text-sm font-semibold text-text-primary truncate cursor-text hover:border-b hover:border-dashed hover:border-text-secondary/50"
+                onDoubleClick={() => onMenuAction(resume.id, "rename")}
+                title="Double-click to rename"
+              >
+                <span className="truncate">{resume.title}</span>
+                <Pencil
+                  size={10}
+                  className="opacity-0 group-hover/title:opacity-50 text-text-secondary shrink-0 transition-opacity"
+                />
               </h3>
               <p className="text-xs text-text-secondary mt-0.5">
                 {formatDate(resume.updatedAt)}

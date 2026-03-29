@@ -55,7 +55,11 @@ export default function SubResumeRow({
           </div>
         ) : (
           <>
-            <span className="text-sm text-text-primary truncate">
+            <span
+              className="text-sm text-text-primary truncate cursor-text hover:border-b hover:border-dashed hover:border-text-secondary/50"
+              onDoubleClick={() => onMenuAction(resume.id, "rename")}
+              title="Double-click to rename"
+            >
               {resume.title}
             </span>
             <span className="text-xs text-text-secondary whitespace-nowrap ml-auto mr-2">

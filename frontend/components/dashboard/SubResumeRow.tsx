@@ -1,14 +1,16 @@
 import { FileText, Pencil } from "lucide-react";
 import type { SubResumeSummary } from "@/lib/resumes";
 import TreeConnector from "./TreeConnector";
-import ResumeMenu from "./ResumeMenu";
+import { SubResumeMenu } from "./ResumeMenu";
 import InlineRename from "./InlineRename";
 
 interface SubResumeRowProps {
   resume: SubResumeSummary;
   isLast: boolean;
   onEdit: (id: string) => void;
-  onMenuAction: (id: string, action: string) => void;
+  onRequestRename: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onRequestDelete: (id: string) => void;
   isRenaming?: boolean;
   onRename?: (id: string, newTitle: string) => void;
   onCancelRename?: () => void;
@@ -27,7 +29,9 @@ export default function SubResumeRow({
   resume,
   isLast,
   onEdit,
-  onMenuAction,
+  onRequestRename,
+  onDuplicate,
+  onRequestDelete,
   isRenaming,
   onRename,
   onCancelRename,
@@ -50,7 +54,7 @@ export default function SubResumeRow({
           <>
             <span
               className="text-sm text-text-primary truncate cursor-text hover:border-b hover:border-dashed hover:border-text-secondary/50"
-              onDoubleClick={() => onMenuAction(resume.id, "rename")}
+              onDoubleClick={() => onRequestRename(resume.id)}
               title="Double-click to rename"
             >
               {resume.title}
@@ -68,13 +72,15 @@ export default function SubResumeRow({
           onClick={() => onEdit(resume.id)}
           className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-text-secondary transition-colors hover:bg-bg-surface hover:text-accent-amber cursor-pointer"
           aria-label={`Edit ${resume.title}`}
-        >
-          <Pencil size={12} />
-          Edit
-        </button>
-        <ResumeMenu
-          isMain={false}
-          onAction={(action) => onMenuAction(resume.id, action)}
+          >
+            <Pencil size={12} />
+            Edit
+          </button>
+        <SubResumeMenu
+          onEdit={() => onEdit(resume.id)}
+          onRename={() => onRequestRename(resume.id)}
+          onDuplicate={() => onDuplicate(resume.id)}
+          onDelete={() => onRequestDelete(resume.id)}
         />
       </div>
     </div>

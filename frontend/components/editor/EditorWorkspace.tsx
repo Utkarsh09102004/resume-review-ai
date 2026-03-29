@@ -2,14 +2,20 @@
 
 import { useCallback, useState } from "react";
 import Toolbar from "@/components/Toolbar";
+import ToolbarBreadcrumbs, {
+  type ToolbarBreadcrumb,
+} from "@/components/ToolbarBreadcrumbs";
 import StatusPill from "@/components/StatusPill";
 import SplitPane from "@/components/editor/SplitPane";
 import EditorPanel from "@/components/editor/EditorPanel";
 import PreviewPanel from "@/components/editor/PreviewPanel";
 import ErrorPanel from "@/components/editor/ErrorPanel";
-import { renameResumeAction, saveResumeLatexAction } from "@/app/(app)/editor/[id]/actions";
+import {
+  renameResumeAction,
+  saveResumeLatexAction,
+} from "@/app/(app)/editor/[id]/actions";
 import { useCompiler } from "@/hooks/useCompiler";
-import api from "@/lib/api";
+import { compileLatex } from "@/lib/compile";
 import type { UserDisplayInfo } from "@/lib/auth";
 import type { ResumeFromAPI } from "@/lib/resumes";
 
@@ -29,8 +35,7 @@ export default function EditorWorkspace({
   const [isSaving, setIsSaving] = useState(false);
 
   const currentLatex = latex ?? resume.latex_source;
-  const hasUnsavedChanges =
-    latex !== null && latex !== resume.latex_source;
+  const hasUnsavedChanges = latex !== null && latex !== resume.latex_source;
 
   const {
     pdfData,
@@ -65,12 +70,10 @@ export default function EditorWorkspace({
     if (!currentLatex.trim()) return;
 
     try {
-      const resp = await api.post(
-        "/api/compile",
-        { latex: currentLatex },
-        { responseType: "arraybuffer" }
-      );
-      const blob = new Blob([resp.data], { type: "application/pdf" });
+      const pdfBytes = await compileLatex(currentLatex);
+      const blob = new Blob([new Uint8Array(pdfBytes)], {
+        type: "application/pdf",
+      });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -100,35 +103,40 @@ export default function EditorWorkspace({
     [resume.id]
   );
 
-  const breadcrumb: {
-    label: string;
-    href?: string;
-    editable?: boolean;
-    onRename?: (newTitle: string) => void;
-  }[] = [{ label: "Dashboard", href: "/dashboard" }];
+  const breadcrumb: ToolbarBreadcrumb[] = [
+    { kind: "link", label: "Dashboard", href: "/dashboard" },
+  ];
 
   if (parentResume) {
-    breadcrumb.push({ label: parentResume.title });
+    breadcrumb.push({ kind: "text", label: parentResume.title });
   }
 
   breadcrumb.push({
+    kind: "editable",
     label: resume.title,
-    editable: true,
     onRename: handleTitleRename,
   });
-
-  const pillStatus: "compiling" | "compiled" | "error" =
-    compileStatus === "compiling"
-      ? "compiling"
-      : compileStatus === "error"
-        ? "error"
-        : "compiled";
 
   return (
     <div className="flex h-screen flex-col">
       <Toolbar
-        breadcrumb={breadcrumb}
+        navigation={<ToolbarBreadcrumbs items={breadcrumb} />}
         user={user}
+        status={
+          compileStatus !== "idle" ? (
+            compileStatus === "compiling" ? (
+              <StatusPill variant="compiling" />
+            ) : compileStatus === "error" ? (
+              <StatusPill
+                variant="error"
+                errorCount={compileErrors.length}
+                onClick={() => setErrorsExpanded(!errorsExpanded)}
+              />
+            ) : (
+              <StatusPill variant="compiled" compiledAgo={compiledAgo} />
+            )
+          ) : null
+        }
         actions={
           <div className="flex items-center gap-2">
             {saveError ? (
@@ -151,16 +159,7 @@ export default function EditorWorkspace({
             </button>
           </div>
         }
-      >
-        {compileStatus !== "idle" ? (
-          <StatusPill
-            status={pillStatus}
-            compiledAgo={compiledAgo}
-            errorCount={compileErrors.length}
-            onErrorClick={() => setErrorsExpanded(!errorsExpanded)}
-          />
-        ) : null}
-      </Toolbar>
+      />
 
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         <div className="hidden md:flex md:flex-1 md:flex-col md:overflow-hidden">

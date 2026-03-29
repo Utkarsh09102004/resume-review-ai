@@ -3,25 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
 
-interface ResumeMenuProps {
-  isMain: boolean;
-  onAction: (action: string) => void;
+interface ResumeMenuItem {
+  label: string;
+  onSelect: () => void;
+  tone?: "default" | "danger";
 }
 
-const MAIN_ITEMS = [
-  { label: "Edit", action: "edit" },
-  { label: "Rename", action: "rename" },
-  { label: "Duplicate", action: "duplicate" },
-  { label: "Create Sub-Resume", action: "create-sub" },
-] as const;
+interface SharedResumeMenuProps {
+  items: ResumeMenuItem[];
+}
 
-const SUB_ITEMS = [
-  { label: "Edit", action: "edit" },
-  { label: "Rename", action: "rename" },
-  { label: "Duplicate", action: "duplicate" },
-] as const;
-
-export default function ResumeMenu({ isMain, onAction }: ResumeMenuProps) {
+function ResumeMenu({ items }: SharedResumeMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -47,8 +39,6 @@ export default function ResumeMenu({ isMain, onAction }: ResumeMenuProps) {
     };
   }, [open]);
 
-  const items = isMain ? MAIN_ITEMS : SUB_ITEMS;
-
   return (
     <div className="relative" ref={menuRef}>
       <button
@@ -70,34 +60,75 @@ export default function ResumeMenu({ isMain, onAction }: ResumeMenuProps) {
         >
           {items.map((item) => (
             <button
-              key={item.action}
+              key={item.label}
               type="button"
               role="menuitem"
               onClick={() => {
-                onAction(item.action);
+                item.onSelect();
                 setOpen(false);
               }}
-              className="flex w-full items-center px-3 py-1.5 text-left text-sm text-text-primary transition-colors hover:bg-bg-surface cursor-pointer"
+              className={`flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-bg-surface cursor-pointer ${
+                item.tone === "danger" ? "text-status-error" : "text-text-primary"
+              }`}
             >
               {item.label}
             </button>
           ))}
-
-          <div className="my-1 h-px bg-bg-border" role="separator" />
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              onAction("delete");
-              setOpen(false);
-            }}
-            className="flex w-full items-center px-3 py-1.5 text-left text-sm text-status-error transition-colors hover:bg-status-error/10 cursor-pointer"
-          >
-            Delete
-          </button>
         </div>
       ) : null}
     </div>
+  );
+}
+
+interface MainResumeMenuProps {
+  onEdit: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onCreateSubResume: () => void;
+  onDelete: () => void;
+}
+
+export function MainResumeMenu({
+  onEdit,
+  onRename,
+  onDuplicate,
+  onCreateSubResume,
+  onDelete,
+}: MainResumeMenuProps) {
+  return (
+    <ResumeMenu
+      items={[
+        { label: "Edit", onSelect: onEdit },
+        { label: "Rename", onSelect: onRename },
+        { label: "Duplicate", onSelect: onDuplicate },
+        { label: "Create Sub-Resume", onSelect: onCreateSubResume },
+        { label: "Delete", onSelect: onDelete, tone: "danger" },
+      ]}
+    />
+  );
+}
+
+interface SubResumeMenuProps {
+  onEdit: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}
+
+export function SubResumeMenu({
+  onEdit,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: SubResumeMenuProps) {
+  return (
+    <ResumeMenu
+      items={[
+        { label: "Edit", onSelect: onEdit },
+        { label: "Rename", onSelect: onRename },
+        { label: "Duplicate", onSelect: onDuplicate },
+        { label: "Delete", onSelect: onDelete, tone: "danger" },
+      ]}
+    />
   );
 }

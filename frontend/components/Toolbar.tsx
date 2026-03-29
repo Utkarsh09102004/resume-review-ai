@@ -1,14 +1,4 @@
-"use client";
-
 import { type ReactNode } from "react";
-import EditableTitle from "@/components/editor/EditableTitle";
-
-interface BreadcrumbItem {
-  label: string;
-  href?: string;
-  editable?: boolean;
-  onRename?: (newTitle: string) => void;
-}
 
 interface ToolbarUser {
   name: string;
@@ -16,8 +6,8 @@ interface ToolbarUser {
 }
 
 interface ToolbarProps {
-  breadcrumb?: BreadcrumbItem[];
-  children?: ReactNode;
+  navigation?: ReactNode;
+  status?: ReactNode;
   actions?: ReactNode;
   user?: ToolbarUser;
 }
@@ -46,63 +36,30 @@ function DiamondIcon() {
 }
 
 export default function Toolbar({
-  breadcrumb,
-  children,
+  navigation,
+  status,
   actions,
   user,
 }: ToolbarProps) {
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-bg-border bg-bg-elevated px-4">
-      {/* Left section */}
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex min-w-0 items-center gap-2">
         <span className="text-accent-amber" aria-hidden="true">
           <DiamondIcon />
         </span>
-        <span className="text-sm font-semibold text-text-primary whitespace-nowrap">
+        <span className="whitespace-nowrap text-sm font-semibold text-text-primary">
           ResumeForge
         </span>
-
-        {breadcrumb && breadcrumb.length > 0 ? (
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 ml-2 min-w-0">
-            {breadcrumb.map((item) => (
-              <span key={item.href ?? item.label} className="flex items-center gap-1.5 min-w-0">
-                <span className="text-text-secondary text-xs" aria-hidden="true">
-                  /
-                </span>
-                {item.editable && item.onRename ? (
-                  <EditableTitle
-                    value={item.label}
-                    onSave={item.onRename}
-                  />
-                ) : item.href ? (
-                  <a
-                    href={item.href}
-                    className="text-xs text-text-secondary hover:text-text-primary transition-colors truncate"
-                  >
-                    {item.label}
-                  </a>
-                ) : (
-                  <span className="text-xs text-text-secondary truncate">
-                    {item.label}
-                  </span>
-                )}
-              </span>
-            ))}
-          </nav>
-        ) : null}
+        {navigation}
       </div>
 
-      {/* Center section */}
-      <div className="flex-1 flex justify-center px-4">
-        {children}
-      </div>
+      <div className="flex flex-1 justify-center px-4">{status}</div>
 
-      {/* Right section */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex shrink-0 items-center gap-3">
         {actions}
         {user ? (
           <div
-            className="h-8 w-8 rounded-full bg-bg-surface border border-bg-border flex items-center justify-center overflow-hidden"
+            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-bg-border bg-bg-surface"
             title={user.name}
           >
             {user.avatarUrl ? (
@@ -115,7 +72,7 @@ export default function Toolbar({
               />
             ) : (
               <span className="text-xs font-medium text-text-secondary">
-                {user.name.charAt(0).toUpperCase()}
+                {user.name[0]?.toUpperCase()}
               </span>
             )}
           </div>

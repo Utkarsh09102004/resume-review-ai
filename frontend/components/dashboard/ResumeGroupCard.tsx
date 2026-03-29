@@ -1,14 +1,16 @@
 import { Pencil, Plus, Square } from "lucide-react";
 import type { ResumeGroup } from "@/lib/resumes";
-import ResumeMenu from "./ResumeMenu";
+import { MainResumeMenu } from "./ResumeMenu";
 import SubResumeRow from "./SubResumeRow";
 import InlineRename from "./InlineRename";
 
 interface ResumeGroupCardProps {
   resume: ResumeGroup;
   onEdit: (id: string) => void;
-  onMenuAction: (id: string, action: string) => void;
-  onNewSubResume: (parentId: string) => void;
+  onRequestRename: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onCreateSubResume: (parentId: string) => void;
+  onRequestDelete: (id: string) => void;
   renamingId?: string | null;
   onRename?: (id: string, newTitle: string) => void;
   onCancelRename?: () => void;
@@ -26,8 +28,10 @@ function formatDate(dateStr: string): string {
 export default function ResumeGroupCard({
   resume,
   onEdit,
-  onMenuAction,
-  onNewSubResume,
+  onRequestRename,
+  onDuplicate,
+  onCreateSubResume,
+  onRequestDelete,
   renamingId,
   onRename,
   onCancelRename,
@@ -53,7 +57,7 @@ export default function ResumeGroupCard({
             <>
               <h3
                 className="group/title inline-flex items-center gap-1 text-sm font-semibold text-text-primary truncate cursor-text hover:border-b hover:border-dashed hover:border-text-secondary/50"
-                onDoubleClick={() => onMenuAction(resume.id, "rename")}
+                onDoubleClick={() => onRequestRename(resume.id)}
                 title="Double-click to rename"
               >
                 <span className="truncate">{resume.title}</span>
@@ -79,9 +83,12 @@ export default function ResumeGroupCard({
             <Pencil size={12} />
             Edit
           </button>
-          <ResumeMenu
-            isMain={true}
-            onAction={(action) => onMenuAction(resume.id, action)}
+          <MainResumeMenu
+            onEdit={() => onEdit(resume.id)}
+            onRename={() => onRequestRename(resume.id)}
+            onDuplicate={() => onDuplicate(resume.id)}
+            onCreateSubResume={() => onCreateSubResume(resume.id)}
+            onDelete={() => onRequestDelete(resume.id)}
           />
         </div>
       </div>
@@ -95,7 +102,9 @@ export default function ResumeGroupCard({
               resume={sub}
               isLast={idx === resume.subResumes.length - 1}
               onEdit={onEdit}
-              onMenuAction={onMenuAction}
+              onRequestRename={onRequestRename}
+              onDuplicate={onDuplicate}
+              onRequestDelete={onRequestDelete}
               isRenaming={renamingId === sub.id}
               onRename={onRename}
               onCancelRename={onCancelRename}
@@ -107,7 +116,7 @@ export default function ResumeGroupCard({
       {/* New sub-resume button */}
       <button
         type="button"
-        onClick={() => onNewSubResume(resume.id)}
+        onClick={() => onCreateSubResume(resume.id)}
         className="mt-3 ml-4 flex items-center gap-1.5 text-xs text-text-secondary transition-colors hover:text-accent-amber cursor-pointer"
       >
         <Plus size={14} />

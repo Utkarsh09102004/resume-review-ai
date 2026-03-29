@@ -2,25 +2,33 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  createResumeAction,
-  createSubResumeAction,
-  deleteResumeAction,
-  duplicateResumeAction,
-  renameResumeAction,
-} from "@/app/(app)/dashboard/actions";
 import Toolbar from "@/components/Toolbar";
 import ResumeGroupCard from "@/components/dashboard/ResumeGroupCard";
 import EmptyState from "@/components/dashboard/EmptyState";
 import NewResumeButton from "@/components/dashboard/NewResumeButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import NameResumeModal from "@/components/dashboard/NameResumeModal";
+import { useDashboardMutations } from "@/hooks/useDashboardMutations";
 import {
   generateDefaultTitle,
   generateSubResumeTitle,
 } from "@/lib/resumeDefaults";
 import type { UserDisplayInfo } from "@/lib/auth";
 import type { ResumeGroup } from "@/lib/resumes";
+
+function findResumeTarget(resumes: ResumeGroup[], id: string) {
+  const parentResume = resumes.find(
+    (resume) => resume.id === id || resume.subResumes.some((subResume) => subResume.id === id)
+  );
+
+  if (!parentResume) {
+    return null;
+  }
+
+  return parentResume.id === id
+    ? { id: parentResume.id, title: parentResume.title }
+    : parentResume.subResumes.find((subResume) => subResume.id === id) ?? null;
+}
 
 export default function DashboardPageClient({
   user,
@@ -39,69 +47,49 @@ export default function DashboardPageClient({
   }>({ open: false, id: "", title: "" });
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [isMutating, setIsMutating] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [nameModal, setNameModal] = useState<{
     open: boolean;
     parentId: string | null;
     defaultName: string;
   }>({ open: false, parentId: null, defaultName: "" });
+  const {
+    isMutating,
+    actionError,
+    clearActionError,
+    createResume,
+    createSubResume,
+    duplicateResume,
+    renameResume,
+    deleteResume,
+  } = useDashboardMutations({
+    openResume: (resumeId) => router.push(`/editor/${resumeId}`),
+    refresh: () => router.refresh(),
+  });
   const error = actionError ?? initialError;
 
   function handleEdit(id: string) {
     router.push(`/editor/${id}`);
   }
 
-  async function handleMenuAction(id: string, action: string) {
+  async function handleDuplicate(id: string) {
     if (isMutating) return;
-
-    if (action === "edit") {
-      router.push(`/editor/${id}`);
-      return;
-    }
-
-    if (action === "delete") {
-      const resume = resumes.find(
-        (r) => r.id === id || r.subResumes.some((s) => s.id === id)
-      );
-      const target =
-        resume?.id === id
-          ? resume
-          : resume?.subResumes.find((s) => s.id === id);
-      if (target) {
-        setDeleteModal({ open: true, id, title: target.title });
-      }
-      return;
-    }
-
-    if (action === "rename") {
-      setRenamingId(id);
-      return;
-    }
-
-    if (action === "duplicate") {
-      setIsMutating(true);
-      setActionError(null);
-      const result = await duplicateResumeAction(id);
-      if (result.ok) {
-        router.refresh();
-      } else {
-        setActionError(result.error);
-      }
-      setIsMutating(false);
-      return;
-    }
-
-    if (action === "create-sub") {
-      const parent = resumes.find((r) => r.id === id);
-      const defaultName = parent
-        ? generateSubResumeTitle(parent.title, parent.subResumes.length)
-        : "Untitled Sub-Resume";
-      setNameModal({ open: true, parentId: id, defaultName });
-    }
+    await duplicateResume(id);
   }
 
-  function handleNewSubResume(parentId: string) {
+  function handleRequestDelete(id: string) {
+    const target = findResumeTarget(resumes, id);
+    if (!target) {
+      return;
+    }
+
+    setDeleteModal({ open: true, id, title: target.title });
+  }
+
+  function handleRequestRename(id: string) {
+    setRenamingId(id);
+  }
+
+  function handleCreateSubResume(parentId: string) {
     const parent = resumes.find((r) => r.id === parentId);
     const defaultName = parent
       ? generateSubResumeTitle(parent.title, parent.subResumes.length)
@@ -117,62 +105,37 @@ export default function DashboardPageClient({
   async function handleNameModalConfirm(name: string) {
     if (isMutating) return;
 
-    setIsMutating(true);
-    setActionError(null);
-
     const parentId = nameModal.parentId;
     setNameModal({ open: false, parentId: null, defaultName: "" });
 
-    const result = parentId
-      ? await createSubResumeAction(parentId, name)
-      : await createResumeAction(name);
-
-    if (result.ok && result.resumeId) {
-      router.push(`/editor/${result.resumeId}`);
-    } else if (!result.ok) {
-      setActionError(result.error);
+    if (parentId) {
+      await createSubResume(parentId, name);
+    } else {
+      await createResume(name);
     }
-
-    setIsMutating(false);
   }
 
   async function handleDeleteConfirm() {
     if (isMutating) return;
 
-    setIsMutating(true);
-    setActionError(null);
-
-    const result = await deleteResumeAction(deleteModal.id);
-    if (result.ok) {
-      router.refresh();
-    } else {
-      setActionError(result.error);
-    }
-
+    const id = deleteModal.id;
     setDeleteModal({ open: false, id: "", title: "" });
-    setIsMutating(false);
+    await deleteResume(id);
   }
 
   async function handleRename(id: string, newTitle: string) {
     if (isMutating) return;
 
-    setIsMutating(true);
-    setActionError(null);
-
-    const result = await renameResumeAction(id, newTitle);
-    if (result.ok) {
-      router.refresh();
-    } else {
-      setActionError(result.error);
-    }
-
+    await renameResume(id, newTitle);
     setRenamingId(null);
-    setIsMutating(false);
   }
 
   return (
     <div className="flex h-screen flex-col">
-      <Toolbar user={user} actions={<NewResumeButton onClick={handleNewResume} />} />
+      <Toolbar
+        user={user}
+        actions={<NewResumeButton onClick={handleNewResume} />}
+      />
 
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
@@ -192,7 +155,7 @@ export default function DashboardPageClient({
                 <button
                   type="button"
                   onClick={() => {
-                    setActionError(null);
+                    clearActionError();
                     router.refresh();
                   }}
                   className="cursor-pointer text-sm text-accent-amber hover:underline"
@@ -210,8 +173,10 @@ export default function DashboardPageClient({
                   key={resume.id}
                   resume={resume}
                   onEdit={handleEdit}
-                  onMenuAction={handleMenuAction}
-                  onNewSubResume={handleNewSubResume}
+                  onRequestRename={handleRequestRename}
+                  onDuplicate={handleDuplicate}
+                  onCreateSubResume={handleCreateSubResume}
+                  onRequestDelete={handleRequestDelete}
                   renamingId={renamingId}
                   onRename={handleRename}
                   onCancelRename={() => setRenamingId(null)}

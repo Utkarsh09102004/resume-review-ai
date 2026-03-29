@@ -8,39 +8,39 @@ describe("StatusPill", () => {
   });
 
   it("shows Compiling... for compiling status", () => {
-    render(<StatusPill status="compiling" />);
+    render(<StatusPill variant="compiling" />);
     expect(screen.getByText("Compiling...")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("shows Compiled for compiled status", () => {
-    render(<StatusPill status="compiled" />);
+    render(<StatusPill variant="compiled" />);
     expect(screen.getByText("Compiled")).toBeInTheDocument();
   });
 
   it("shows Compiled with ago text when provided", () => {
-    render(<StatusPill status="compiled" compiledAgo="5s ago" />);
+    render(<StatusPill variant="compiled" compiledAgo="5s ago" />);
     expect(screen.getByText("Compiled 5s ago")).toBeInTheDocument();
   });
 
   it("shows error count for error status", () => {
-    render(<StatusPill status="error" errorCount={3} />);
+    render(<StatusPill variant="error" errorCount={3} />);
     expect(screen.getByText("3 errors")).toBeInTheDocument();
   });
 
   it("shows singular error for count of 1", () => {
-    render(<StatusPill status="error" errorCount={1} />);
+    render(<StatusPill variant="error" errorCount={1} />);
     expect(screen.getByText("1 error")).toBeInTheDocument();
   });
 
   it("shows generic Error when no errorCount provided", () => {
-    render(<StatusPill status="error" />);
+    render(<StatusPill variant="error" />);
     expect(screen.getByText("Error")).toBeInTheDocument();
   });
 
   it("error variant is a clickable button", () => {
     const onClick = vi.fn();
-    render(<StatusPill status="error" errorCount={2} onErrorClick={onClick} />);
+    render(<StatusPill variant="error" errorCount={2} onClick={onClick} />);
     const button = screen.getByRole("button");
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledOnce();

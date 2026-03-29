@@ -13,15 +13,15 @@ interface PreviewPanelProps {
 function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const pdfRef = useRef<PDFDocumentProxy | null>(null);
 
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
 
   // Load the PDF document when pdfData changes
   useEffect(() => {
     if (!pdfData) {
-      pdfRef.current = null;
+      setPdfDoc(null);
       setNumPages(0);
       setCurrentPage(1);
       return;
@@ -39,7 +39,7 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
 
       if (cancelled) return;
 
-      pdfRef.current = pdf;
+      setPdfDoc(pdf);
       setNumPages(pdf.numPages);
       setCurrentPage(1);
     }
@@ -51,18 +51,17 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
     };
   }, [pdfData]);
 
-  // Render the current page whenever it changes
+  // Render the current page whenever the document or page changes
   useEffect(() => {
-    if (!pdfRef.current || !canvasRef.current || numPages === 0) return;
+    if (!pdfDoc || !canvasRef.current || numPages === 0) return;
 
     let cancelled = false;
     let renderTask: { cancel(): void; promise: Promise<void> } | null = null;
 
     async function renderPage() {
-      const pdf = pdfRef.current;
-      if (!pdf) return;
+      if (!pdfDoc) return;
 
-      const page = await pdf.getPage(currentPage);
+      const page = await pdfDoc.getPage(currentPage);
       const canvas = canvasRef.current;
       if (!canvas || cancelled) return;
 
@@ -91,7 +90,7 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [currentPage, numPages]);
+  }, [pdfDoc, currentPage, numPages]);
 
   const goToPrev = useCallback(() => {
     setCurrentPage((p) => Math.max(1, p - 1));

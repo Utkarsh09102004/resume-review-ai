@@ -253,3 +253,127 @@ async def test_delete_cascades_sub_resumes(client: AsyncClient) -> None:
     # Verify child is also gone (cascade)
     get_resp = await client.get(f"/api/resumes/{child_id}")
     assert get_resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Edge-case tests (Issue #28)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_resume_parent_and_latex_returns_422(client: AsyncClient) -> None:
+    parent_resp = await client.post("/api/resumes/", json={"title": "Parent"})
+    assert parent_resp.status_code == 201
+    parent_id = parent_resp.json()["id"]
+
+    resp = await client.post(
+        "/api/resumes/",
+        json={
+            "title": "Conflict",
+            "parent_id": parent_id,
+            "latex_source": r"\documentclass{article}\begin{document}Nope\end{document}",
+        },
+    )
+    assert resp.status_code == 422
+    assert "Cannot provide latex_source when forking" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_resume_partial_title_only(client: AsyncClient) -> None:
+    original_latex = r"\documentclass{article}\begin{document}Original\end{document}"
+    create_resp = await client.post(
+        "/api/resumes/",
+        json={"title": "Original Title", "latex_source": original_latex},
+    )
+    assert create_resp.status_code == 201
+    resume_id = create_resp.json()["id"]
+
+    resp = await client.put(f"/api/resumes/{resume_id}", json={"title": "Updated Title"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Updated Title"
+    assert data["latex_source"] == original_latex
+
+
+@pytest.mark.asyncio
+async def test_update_resume_partial_latex_only(client: AsyncClient) -> None:
+    create_resp = await client.post(
+        "/api/resumes/",
+        json={
+            "title": "Keep This Title",
+            "latex_source": r"\documentclass{article}\begin{document}Old\end{document}",
+        },
+    )
+    assert create_resp.status_code == 201
+    resume_id = create_resp.json()["id"]
+
+    new_latex = r"\documentclass{article}\begin{document}New\end{document}"
+    resp = await client.put(f"/api/resumes/{resume_id}", json={"latex_source": new_latex})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Keep This Title"
+    assert data["latex_source"] == new_latex
+
+
+@pytest.mark.asyncio
+async def test_update_resume_other_user_returns_404(client: AsyncClient, test_engine) -> None:  # type: ignore[no-untyped-def]
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override_other_user() -> str:
+        return "other-user"
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_current_user] = override_other_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other_client:
+        other_resp = await other_client.post(
+            "/api/resumes/",
+            json={"title": "Other's Resume"},
+        )
+        assert other_resp.status_code == 201
+        other_id = other_resp.json()["id"]
+
+    async def override_test_user() -> str:
+        return "test-user"
+
+    app.dependency_overrides[get_current_user] = override_test_user
+
+    resp = await client.put(f"/api/resumes/{other_id}", json={"title": "Hijacked"})
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_resume_other_user_returns_404(client: AsyncClient, test_engine) -> None:  # type: ignore[no-untyped-def]
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override_other_user() -> str:
+        return "other-user"
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_current_user] = override_other_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other_client:
+        other_resp = await other_client.post(
+            "/api/resumes/",
+            json={"title": "Other's Resume"},
+        )
+        assert other_resp.status_code == 201
+        other_id = other_resp.json()["id"]
+
+    async def override_test_user() -> str:
+        return "test-user"
+
+    app.dependency_overrides[get_current_user] = override_test_user
+
+    resp = await client.delete(f"/api/resumes/{other_id}")
+    assert resp.status_code == 404

@@ -1,34 +1,36 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
 import Toolbar from "@/components/Toolbar";
 import StatusPill from "@/components/StatusPill";
 import SplitPane from "@/components/editor/SplitPane";
 import EditorPanel from "@/components/editor/EditorPanel";
 import PreviewPanel from "@/components/editor/PreviewPanel";
 import ErrorPanel from "@/components/editor/ErrorPanel";
-import { useResumeEditor } from "@/hooks/useResumeEditor";
+import { renameResumeAction, saveResumeLatexAction } from "@/app/(app)/editor/[id]/actions";
 import { useCompiler } from "@/hooks/useCompiler";
 import api from "@/lib/api";
 import type { UserDisplayInfo } from "@/lib/auth";
+import type { ResumeFromAPI } from "@/lib/resumes";
 
-export default function EditorPageClient({
-  resumeId,
+export default function EditorWorkspace({
+  initialResume,
+  parentResume,
   user,
 }: {
-  resumeId: string;
+  initialResume: ResumeFromAPI;
+  parentResume: ResumeFromAPI | null;
   user: UserDisplayInfo;
 }) {
-  const router = useRouter();
-  const { resume, parentResume, loading, notFound, error, isSaving, save } =
-    useResumeEditor(resumeId);
-
+  const [resume, setResume] = useState(initialResume);
   const [latex, setLatex] = useState<string | null>(null);
   const [errorsExpanded, setErrorsExpanded] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const currentLatex = latex ?? resume?.latex_source ?? "";
+  const currentLatex = latex ?? resume.latex_source;
+  const hasUnsavedChanges =
+    latex !== null && latex !== resume.latex_source;
 
   const {
     pdfData,
@@ -42,17 +44,24 @@ export default function EditorPageClient({
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!resume || latex === null) return;
+    if (!hasUnsavedChanges || latex === null) {
+      return;
+    }
 
     try {
+      setIsSaving(true);
       setSaveError(null);
-      await save({ latex_source: latex });
+      const updatedResume = await saveResumeLatexAction(resume.id, latex);
+      setResume(updatedResume);
+      setLatex(null);
     } catch {
       setSaveError("Failed to save");
+    } finally {
+      setIsSaving(false);
     }
-  }, [resume, latex, save]);
+  }, [hasUnsavedChanges, latex, resume.id]);
 
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
     if (!currentLatex.trim()) return;
 
     try {
@@ -63,28 +72,32 @@ export default function EditorPageClient({
       );
       const blob = new Blob([resp.data], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${resume?.title ?? "resume"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${resume.title}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download compile failed:", err);
+    } catch (error) {
+      console.error("Download compile failed:", error);
     }
-  };
+  }, [currentLatex, resume.title]);
 
   const handleTitleRename = useCallback(
     async (newTitle: string) => {
       try {
+        setIsSaving(true);
         setSaveError(null);
-        await save({ title: newTitle });
+        const updatedResume = await renameResumeAction(resume.id, newTitle);
+        setResume(updatedResume);
       } catch {
         setSaveError("Failed to rename");
+      } finally {
+        setIsSaving(false);
       }
     },
-    [save]
+    [resume.id]
   );
 
   const breadcrumb: {
@@ -98,13 +111,11 @@ export default function EditorPageClient({
     breadcrumb.push({ label: parentResume.title });
   }
 
-  if (resume) {
-    breadcrumb.push({
-      label: resume.title,
-      editable: true,
-      onRename: handleTitleRename,
-    });
-  }
+  breadcrumb.push({
+    label: resume.title,
+    editable: true,
+    onRename: handleTitleRename,
+  });
 
   const pillStatus: "compiling" | "compiled" | "error" =
     compileStatus === "compiling"
@@ -112,65 +123,6 @@ export default function EditorPageClient({
       : compileStatus === "error"
         ? "error"
         : "compiled";
-
-  if (loading) {
-    return (
-      <div className="flex h-screen flex-col">
-        <Toolbar user={user} />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-bg-border border-t-accent-amber" />
-            <p className="text-sm text-text-secondary">Loading resume...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (notFound) {
-    return (
-      <div className="flex h-screen flex-col">
-        <Toolbar user={user} />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <p className="text-lg font-semibold text-text-primary">
-              Resume not found
-            </p>
-            <p className="text-sm text-text-secondary">
-              This resume may have been deleted.
-            </p>
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="mt-2 cursor-pointer text-sm text-accent-amber hover:underline"
-            >
-              Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-screen flex-col">
-        <Toolbar user={user} />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <p className="text-sm text-status-error">{error}</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="cursor-pointer text-sm text-accent-amber hover:underline"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen flex-col">
@@ -185,8 +137,8 @@ export default function EditorPageClient({
             <button
               type="button"
               onClick={handleSave}
-              disabled={isSaving}
-              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-bg-border px-3 text-xs font-medium text-text-secondary transition-colors hover:border-accent-amber hover:text-accent-amber disabled:opacity-50"
+              disabled={isSaving || !hasUnsavedChanges}
+              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-bg-border px-3 text-xs font-medium text-text-secondary transition-colors hover:border-accent-amber hover:text-accent-amber disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? "Saving..." : "Save"}
             </button>

@@ -1,6 +1,7 @@
 import {
   getLogtoContext,
   getAccessToken,
+  getAccessTokenRSC,
 } from '@logto/next/server-actions';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
@@ -106,6 +107,24 @@ export async function getAuthAccessToken(): Promise<string | undefined> {
 
   try {
     return await getAccessToken(logtoConfig);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Get a Bearer access token for the current user from a Server Component.
+ *
+ * In dev mode returns undefined — the backend defaults to a dev user
+ * when AUTH_ENABLED=false.
+ */
+export async function getAuthAccessTokenRSC(): Promise<string | undefined> {
+  if (!isAuthEnabled()) {
+    return undefined;
+  }
+
+  try {
+    return await getAccessTokenRSC(logtoConfig);
   } catch {
     return undefined;
   }

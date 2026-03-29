@@ -6,7 +6,24 @@ const mockRequireUserDisplayInfo = vi.fn(async () => ({ name: "Alice" }));
 const mockDashboardGet = vi.fn();
 const mockCreateAuthenticatedApi = vi.fn(async () => ({ get: mockDashboardGet }));
 const mockDashboardClient = vi.fn<(props: unknown) => void>();
-const mockEditorClient = vi.fn<(props: unknown) => void>();
+const mockEditorWorkspace = vi.fn<(props: unknown) => void>();
+const mockGetEditorPageData = vi.fn<
+  (id: string) => Promise<{
+    resume: {
+      id: string;
+      user_id: string;
+      parent_id: string | null;
+      title: string;
+      latex_source: string;
+      created_at: string;
+      updated_at: string;
+    };
+    parentResume: null;
+  } | null>
+>();
+const mockNotFound = vi.fn(() => {
+  throw new Error("NEXT_NOT_FOUND");
+});
 
 vi.mock("@/lib/auth", () => ({
   requireUserDisplayInfo: () => mockRequireUserDisplayInfo(),
@@ -16,6 +33,10 @@ vi.mock("@/lib/api", () => ({
   createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
 }));
 
+vi.mock("next/navigation", () => ({
+  notFound: () => mockNotFound(),
+}));
+
 vi.mock("@/components/dashboard/DashboardPageClient", () => ({
   default: (props: unknown) => {
     mockDashboardClient(props);
@@ -23,11 +44,15 @@ vi.mock("@/components/dashboard/DashboardPageClient", () => ({
   },
 }));
 
-vi.mock("@/components/editor/EditorPageClient", () => ({
+vi.mock("@/components/editor/EditorWorkspace", () => ({
   default: (props: unknown) => {
-    mockEditorClient(props);
+    mockEditorWorkspace(props);
     return null;
   },
+}));
+
+vi.mock("@/app/(app)/editor/[id]/editor-data", () => ({
+  getEditorPageData: (id: string) => mockGetEditorPageData(id),
 }));
 
 describe("authenticated app shell", () => {
@@ -56,6 +81,18 @@ describe("authenticated app shell", () => {
           updated_at: "2025-01-02T00:00:00Z",
         },
       ],
+    });
+    mockGetEditorPageData.mockResolvedValue({
+      resume: {
+        id: "resume-123",
+        user_id: "user-1",
+        parent_id: null,
+        title: "My Resume",
+        latex_source: "\\documentclass{article}",
+        created_at: "2025-01-01T00:00:00Z",
+        updated_at: "2025-01-01T00:00:00Z",
+      },
+      parentResume: null,
     });
   });
 
@@ -97,15 +134,36 @@ describe("authenticated app shell", () => {
     });
   });
 
-  it("passes server-loaded user props and params into the editor client page", async () => {
+  it("passes server-loaded editor data into the editor workspace island", async () => {
     const { default: EditorPage } = await import("@/app/(app)/editor/[id]/page");
 
     render(await EditorPage({ params: Promise.resolve({ id: "resume-123" }) }));
 
     expect(mockRequireUserDisplayInfo).toHaveBeenCalledTimes(1);
-    expect(mockEditorClient).toHaveBeenCalledWith({
-      resumeId: "resume-123",
+    expect(mockGetEditorPageData).toHaveBeenCalledWith("resume-123");
+    expect(mockEditorWorkspace).toHaveBeenCalledWith({
+      initialResume: {
+        id: "resume-123",
+        user_id: "user-1",
+        parent_id: null,
+        title: "My Resume",
+        latex_source: "\\documentclass{article}",
+        created_at: "2025-01-01T00:00:00Z",
+        updated_at: "2025-01-01T00:00:00Z",
+      },
+      parentResume: null,
       user: { name: "Alice" },
     });
+  });
+
+  it("calls notFound when the editor resume does not exist", async () => {
+    mockGetEditorPageData.mockResolvedValueOnce(null);
+    const { default: EditorPage } = await import("@/app/(app)/editor/[id]/page");
+
+    await expect(
+      EditorPage({ params: Promise.resolve({ id: "missing-resume" }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(mockNotFound).toHaveBeenCalledTimes(1);
   });
 });

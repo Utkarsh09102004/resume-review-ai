@@ -7,6 +7,7 @@ vi.mock('@logto/next/server-actions', () => ({
     claims: { sub: 'real-user' },
   })),
   getAccessToken: vi.fn(async () => 'mock-token'),
+  getAccessTokenRSC: vi.fn(async () => 'mock-rsc-token'),
   signIn: vi.fn(),
   signOut: vi.fn(),
   handleSignIn: vi.fn(),
@@ -29,6 +30,7 @@ describe('createAuthenticatedApi', () => {
 
   beforeEach(() => {
     vi.resetModules();
+    vi.doUnmock('@/lib/auth');
     process.env = { ...originalEnv };
   });
 
@@ -60,6 +62,7 @@ describe('createAuthenticatedApi', () => {
     vi.doMock('@/lib/auth', () => ({
       isAuthEnabled: () => true,
       getAuthAccessToken: async () => undefined,
+      getAuthAccessTokenRSC: async () => undefined,
     }));
 
     const { createAuthenticatedApi } = await import('@/lib/api');
@@ -71,5 +74,26 @@ describe('createAuthenticatedApi', () => {
       client.defaults.headers?.Authorization ??
       client.defaults.headers?.common?.Authorization;
     expect(authHeader).toBeUndefined();
+  });
+});
+
+describe('createAuthenticatedApiRSC', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doUnmock('@/lib/auth');
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('returns authenticated client with Bearer token when auth is enabled in RSC', async () => {
+    process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+    const { createAuthenticatedApiRSC } = await import('@/lib/api');
+    const client = await createAuthenticatedApiRSC();
+    expect(client.defaults.headers?.Authorization).toBe('Bearer mock-rsc-token');
   });
 });

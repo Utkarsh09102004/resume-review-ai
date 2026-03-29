@@ -4,6 +4,7 @@ const mockRedirect = vi.fn();
 
 // Keep references to mocks so we can override per-test
 const mockGetAccessToken = vi.fn(async () => 'mock-token');
+const mockGetAccessTokenRSC = vi.fn(async () => 'mock-rsc-token');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockGetLogtoContext = vi.fn<any>(async () => ({
   isAuthenticated: true as boolean,
@@ -14,6 +15,7 @@ const mockGetLogtoContext = vi.fn<any>(async () => ({
 vi.mock('@logto/next/server-actions', () => ({
   getLogtoContext: (...args: unknown[]) => (mockGetLogtoContext as (...a: unknown[]) => unknown)(...args),
   getAccessToken: () => mockGetAccessToken(),
+  getAccessTokenRSC: () => mockGetAccessTokenRSC(),
   signIn: vi.fn(),
   signOut: vi.fn(),
   handleSignIn: vi.fn(),
@@ -39,6 +41,7 @@ describe('auth utilities', () => {
       claims: { sub: 'real-user' },
     });
     mockGetAccessToken.mockResolvedValue('mock-token');
+    mockGetAccessTokenRSC.mockResolvedValue('mock-rsc-token');
   });
 
   afterEach(() => {
@@ -140,6 +143,23 @@ describe('auth utilities', () => {
       mockGetAccessToken.mockRejectedValueOnce(new Error('Token expired'));
       const { getAuthAccessToken } = await import('@/lib/auth');
       const token = await getAuthAccessToken();
+      expect(token).toBeUndefined();
+    });
+  });
+
+  describe('getAuthAccessTokenRSC — auth enabled', () => {
+    it('returns a token from the SDK RSC helper', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      const { getAuthAccessTokenRSC } = await import('@/lib/auth');
+      const token = await getAuthAccessTokenRSC();
+      expect(token).toBe('mock-rsc-token');
+    });
+
+    it('returns undefined when the SDK throws in RSC mode', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetAccessTokenRSC.mockRejectedValueOnce(new Error('Token expired'));
+      const { getAuthAccessTokenRSC } = await import('@/lib/auth');
+      const token = await getAuthAccessTokenRSC();
       expect(token).toBeUndefined();
     });
   });

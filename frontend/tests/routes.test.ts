@@ -11,6 +11,7 @@ vi.mock('@logto/next/server-actions', () => ({
   handleSignIn: (...args: unknown[]) => mockHandleSignIn(...args),
   getLogtoContext: vi.fn(),
   getAccessToken: vi.fn(),
+  getAccessTokenRSC: vi.fn(),
 }));
 
 describe('API route handlers', () => {

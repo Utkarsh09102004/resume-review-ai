@@ -7,8 +7,13 @@ import ResumeGroupCard from "@/components/dashboard/ResumeGroupCard";
 import EmptyState from "@/components/dashboard/EmptyState";
 import NewResumeButton from "@/components/dashboard/NewResumeButton";
 import ConfirmModal from "@/components/ConfirmModal";
+import NameResumeModal from "@/components/dashboard/NameResumeModal";
 import { useResumes } from "@/hooks/useResumes";
 import { useUser } from "@/components/UserProvider";
+import {
+  generateDefaultTitle,
+  generateSubResumeTitle,
+} from "@/lib/resumeDefaults";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -32,6 +37,11 @@ export default function DashboardPage() {
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [nameModal, setNameModal] = useState<{
+    open: boolean;
+    parentId: string | null;
+    defaultName: string;
+  }>({ open: false, parentId: null, defaultName: "" });
 
   async function handleEdit(id: string) {
     router.push(`/editor/${id}`);
@@ -72,30 +82,36 @@ export default function DashboardPage() {
     }
 
     if (action === "create-sub") {
-      try {
-        const newId = await createSubResume(id, "Untitled Sub-Resume");
-        router.push(`/editor/${newId}`);
-      } catch (err) {
-        console.error("Create sub-resume failed:", err);
-      }
+      const parent = resumes.find((r) => r.id === id);
+      const defaultName = parent
+        ? generateSubResumeTitle(parent.title, parent.subResumes.length)
+        : "Untitled Sub-Resume";
+      setNameModal({ open: true, parentId: id, defaultName });
       return;
     }
   }
 
-  async function handleNewSubResume(parentId: string) {
-    try {
-      const newId = await createSubResume(parentId, "Untitled Sub-Resume");
-      router.push(`/editor/${newId}`);
-    } catch (err) {
-      console.error("Create sub-resume failed:", err);
-    }
+  function handleNewSubResume(parentId: string) {
+    const parent = resumes.find((r) => r.id === parentId);
+    const defaultName = parent
+      ? generateSubResumeTitle(parent.title, parent.subResumes.length)
+      : "Untitled Sub-Resume";
+    setNameModal({ open: true, parentId, defaultName });
   }
 
-  async function handleNewResume() {
+  function handleNewResume() {
+    const defaultName = generateDefaultTitle(resumes.map((r) => r.title));
+    setNameModal({ open: true, parentId: null, defaultName });
+  }
+
+  async function handleNameModalConfirm(name: string) {
     if (isCreating) return;
     try {
       setIsCreating(true);
-      const newId = await createResume("Untitled Resume");
+      setNameModal({ open: false, parentId: null, defaultName: "" });
+      const newId = nameModal.parentId
+        ? await createSubResume(nameModal.parentId, name)
+        : await createResume(name);
       router.push(`/editor/${newId}`);
     } catch (err) {
       console.error("Create resume failed:", err);
@@ -191,6 +207,18 @@ export default function DashboardPage() {
         onConfirm={handleDeleteConfirm}
         title="Delete Resume"
         message={`Are you sure you want to delete "${deleteModal.title}"? This action cannot be undone.`}
+      />
+
+      <NameResumeModal
+        open={nameModal.open}
+        onClose={() =>
+          setNameModal({ open: false, parentId: null, defaultName: "" })
+        }
+        onConfirm={handleNameModalConfirm}
+        title={
+          nameModal.parentId ? "Name Your Sub-Resume" : "Name Your Resume"
+        }
+        defaultName={nameModal.defaultName}
       />
     </div>
   );

@@ -1,0 +1,28 @@
+# Dependencies (reinstalled in container via npm ci)
+node_modules/
+
+# Build output (rebuilt in container)
+.next/
+out/
+
+# Environment files (contain secrets)
+.env
+.env.*
+
+# Tests (not needed in production image)
+tests/
+coverage/
+vitest.config.ts
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Docs
+CLAUDE.md
+README.md

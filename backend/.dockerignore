@@ -1,0 +1,27 @@
+# Virtual environment (dependencies installed via uv sync in container)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment files (contain secrets)
+.env
+.env.*
+
+# Tests (not needed in production image)
+tests/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Docs
+README.md

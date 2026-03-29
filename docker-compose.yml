@@ -60,11 +60,19 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_AUTH_ENABLED: ${AUTH_ENABLED:-false}
+        NEXT_PUBLIC_BASE_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      LOGTO_ENDPOINT: ${LOGTO_ENDPOINT:-}
+      LOGTO_APP_ID: ${LOGTO_APP_ID:-}
+      LOGTO_APP_SECRET: ${LOGTO_APP_SECRET:-}
+      LOGTO_COOKIE_SECRET: ${LOGTO_COOKIE_SECRET:-complex_password_at_least_32_characters_long_for_dev}
     depends_on:
       backend:
         condition: service_healthy

@@ -36,6 +36,11 @@ describe('Home page', () => {
     expect(mockRedirect).toHaveBeenCalledWith('/dashboard');
   });
 
+  it('forces dynamic rendering so auth checks do not run during build prerender', async () => {
+    const { dynamic } = await import('@/app/page');
+    expect(dynamic).toBe('force-dynamic');
+  });
+
   it('redirects to /dashboard when authenticated', async () => {
     mockIsAuthEnabled.mockReturnValue(true);
     mockGetAuthContext.mockResolvedValue({ isAuthenticated: true });

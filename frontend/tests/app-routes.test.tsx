@@ -111,6 +111,11 @@ describe("authenticated app routes", () => {
     expect(result).toBeTruthy();
   });
 
+  it("forces dynamic rendering for the authenticated route shell", async () => {
+    const { dynamic } = await import("@/app/(app)/layout");
+    expect(dynamic).toBe("force-dynamic");
+  });
+
   it("passes server-loaded user and resume props into the dashboard client page", async () => {
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
 

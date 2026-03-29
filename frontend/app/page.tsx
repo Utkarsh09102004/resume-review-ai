@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getAuthContext, isAuthEnabled } from '@/lib/auth';
 
+// This route branches on request-scoped auth state and must never be prerendered.
+export const dynamic = 'force-dynamic';
+
 export default async function Home() {
   // In dev mode (auth disabled), go straight to dashboard
   if (!isAuthEnabled()) {

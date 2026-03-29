@@ -178,7 +178,11 @@ function EditorPanelInner({ value, onChange }: EditorPanelProps) {
         viewRef.current = null;
       }
     };
-    // Only run on mount — value updates are handled by the editor internally
+    // Only run on mount — the editor owns its document state after initialization.
+    // External value prop changes are intentionally ignored because:
+    // 1. The editor is the sole source of truth (parent reads via onChange).
+    // 2. Syncing external value would destroy undo history and cursor position.
+    // See Issue #23 — this is by design, not a bug.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

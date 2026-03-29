@@ -63,9 +63,9 @@ export function useResumes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchResumes = useCallback(async () => {
+  const fetchResumes = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const resp = await api.get<ResumeFromAPI[]>("/api/resumes/");
       setResumes(groupResumes(resp.data));
@@ -73,7 +73,7 @@ export function useResumes() {
       setError("Failed to load resumes");
       console.error("fetchResumes error:", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -84,7 +84,7 @@ export function useResumes() {
   const createResume = useCallback(
     async (title: string): Promise<string> => {
       const resp = await api.post<ResumeFromAPI>("/api/resumes/", { title });
-      await fetchResumes();
+      await fetchResumes(true);
       return resp.data.id;
     },
     [fetchResumes]
@@ -96,7 +96,7 @@ export function useResumes() {
         title,
         parent_id: parentId,
       });
-      await fetchResumes();
+      await fetchResumes(true);
       return resp.data.id;
     },
     [fetchResumes]
@@ -105,7 +105,7 @@ export function useResumes() {
   const renameResume = useCallback(
     async (id: string, title: string) => {
       await api.put(`/api/resumes/${id}`, { title });
-      await fetchResumes();
+      await fetchResumes(true);
     },
     [fetchResumes]
   );
@@ -117,7 +117,7 @@ export function useResumes() {
         title: `${original.data.title} (copy)`,
         latex_source: original.data.latex_source,
       });
-      await fetchResumes();
+      await fetchResumes(true);
       return resp.data.id;
     },
     [fetchResumes]
@@ -126,7 +126,7 @@ export function useResumes() {
   const deleteResume = useCallback(
     async (id: string) => {
       await api.delete(`/api/resumes/${id}`);
-      await fetchResumes();
+      await fetchResumes(true);
     },
     [fetchResumes]
   );

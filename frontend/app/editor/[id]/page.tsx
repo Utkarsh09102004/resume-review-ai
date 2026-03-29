@@ -26,16 +26,9 @@ export default function EditorPage({
   const [errorsExpanded, setErrorsExpanded] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Track whether we've initialized the editor from the loaded resume
-  const [initialized, setInitialized] = useState(false);
-
-  // Once resume loads, set initial LaTeX in editor
-  if (resume && !initialized) {
-    setLatex(resume.latex_source);
-    setInitialized(true);
-  }
-
-  const currentLatex = latex ?? "";
+  // Derive current LaTeX: user edits (latex) take priority, otherwise fall back
+  // to the loaded resume source. No useEffect needed — null means "not yet edited".
+  const currentLatex = latex ?? resume?.latex_source ?? "";
 
   const {
     pdfData,

@@ -15,6 +15,7 @@ export default function InlineRename({
 }: InlineRenameProps) {
   const [text, setText] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
+  const savedRef = useRef(false);
 
   useEffect(() => {
     inputRef.current?.select();
@@ -25,6 +26,7 @@ export default function InlineRename({
       e.preventDefault();
       const trimmed = text.trim();
       if (trimmed.length > 0) {
+        savedRef.current = true;
         onSave(trimmed);
       } else {
         onCancel();
@@ -35,6 +37,7 @@ export default function InlineRename({
   }
 
   function handleBlur() {
+    if (savedRef.current) return;
     const trimmed = text.trim();
     if (trimmed.length > 0 && trimmed !== value) {
       onSave(trimmed);

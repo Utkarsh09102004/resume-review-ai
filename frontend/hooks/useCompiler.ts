@@ -19,6 +19,7 @@ export function useCompiler(latex: string) {
   const [compiledAgo, setCompiledAgo] = useState<string>("");
   const compiledAtRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Update "compiled X ago" label
   const updateAgoLabel = useCallback(() => {
@@ -41,15 +42,28 @@ export function useCompiler(latex: string) {
     };
   }, [updateAgoLabel]);
 
+  // Abort in-flight compile request on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const compile = useCallback(
     async (source: string) => {
       if (!source.trim()) return;
+
+      // Abort any in-flight compilation request
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       setStatus("compiling");
 
       try {
         const resp = await api.post("/api/compile", { latex: source }, {
           responseType: "arraybuffer",
+          signal: controller.signal,
         });
         const data = new Uint8Array(resp.data);
         setPdfData(data);
@@ -58,6 +72,9 @@ export function useCompiler(latex: string) {
         compiledAtRef.current = Date.now();
         updateAgoLabel();
       } catch (err) {
+        // Ignore aborted requests — a newer compile has taken over
+        if (axios.isCancel(err)) return;
+
         if (axios.isAxiosError(err) && err.response) {
           try {
             const errorText = new TextDecoder().decode(err.response.data);

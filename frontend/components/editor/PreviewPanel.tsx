@@ -16,6 +16,7 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
     if (!pdfData || !canvasRef.current) return;
 
     let cancelled = false;
+    let renderTask: { cancel(): void; promise: Promise<void> } | null = null;
 
     async function renderPdf() {
       const pdfjsLib = await import("pdfjs-dist");
@@ -41,16 +42,22 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
       canvas.height = scaledViewport.height;
       canvas.width = scaledViewport.width;
 
-      await page.render({
+      renderTask = page.render({
         canvas,
         viewport: scaledViewport,
-      }).promise;
+      });
+      try {
+        await renderTask.promise;
+      } catch {
+        // Render was cancelled during cleanup — ignore
+      }
     }
 
     renderPdf();
 
     return () => {
       cancelled = true;
+      renderTask?.cancel();
     };
   }, [pdfData]);
 

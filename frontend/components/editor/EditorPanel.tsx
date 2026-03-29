@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 
 interface EditorPanelProps {
   value: string;
   onChange: (value: string) => void;
 }
 
-function EditorPanelInner({ value, onChange }: EditorPanelProps) {
+export default function EditorPanel({ value, onChange }: EditorPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<import("@codemirror/view").EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -193,14 +192,3 @@ function EditorPanelInner({ value, onChange }: EditorPanelProps) {
     />
   );
 }
-
-const EditorPanel = dynamic(() => Promise.resolve(EditorPanelInner), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-bg-surface">
-      <span className="text-sm text-text-secondary">Loading editor...</span>
-    </div>
-  ),
-});
-
-export default EditorPanel;

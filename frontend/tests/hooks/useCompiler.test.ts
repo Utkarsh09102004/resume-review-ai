@@ -5,26 +5,20 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 // Mocks — vi.hoisted ensures these are available when vi.mock factories run
 // ---------------------------------------------------------------------------
 
-const { mockApi, mockIsAxiosError, mockIsCancel } = vi.hoisted(() => ({
-  mockApi: {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
-  mockIsAxiosError: vi.fn(),
-  mockIsCancel: vi.fn(),
+const { mockCompileLatex } = vi.hoisted(() => ({
+  mockCompileLatex: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({ default: mockApi }));
-vi.mock("axios", () => ({
-  default: {
-    isAxiosError: mockIsAxiosError,
-    isCancel: mockIsCancel,
-  },
-  isAxiosError: mockIsAxiosError,
-  isCancel: mockIsCancel,
-}));
+vi.mock("@/lib/compile", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/compile")>(
+    "@/lib/compile"
+  );
+
+  return {
+    ...actual,
+    compileLatex: (...args: unknown[]) => mockCompileLatex(...args),
+  };
+});
 
 // Bypass debounce — return a referentially stable wrapper (like the real hook)
 const _debouncedRef: { current: ((...args: unknown[]) => unknown) | null } = { current: null };
@@ -36,21 +30,8 @@ vi.mock("use-debounce", () => ({
   },
 }));
 
+import { CompileRequestError } from "@/lib/compile";
 import { useCompiler } from "@/hooks/useCompiler";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeAxiosError(data: Record<string, unknown>) {
-  const jsonStr = JSON.stringify(data);
-  const buf = new TextEncoder().encode(jsonStr).buffer;
-  const err = Object.assign(new Error("Request failed"), {
-    response: { data: buf as ArrayBuffer },
-    isAxiosError: true,
-  });
-  return err;
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -60,10 +41,6 @@ describe("useCompiler", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    mockIsAxiosError.mockImplementation(
-      (e: unknown) => !!(e && typeof e === "object" && "isAxiosError" in e && (e as Record<string, unknown>).isAxiosError),
-    );
-    mockIsCancel.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -80,8 +57,7 @@ describe("useCompiler", () => {
   });
 
   it("compile success sets status to compiled and pdfData", async () => {
-    const pdfBytes = new ArrayBuffer(8);
-    mockApi.post.mockResolvedValue({ data: pdfBytes });
+    mockCompileLatex.mockResolvedValue(new Uint8Array(8));
 
     const { result } = renderHook(() => useCompiler(""));
 
@@ -95,10 +71,11 @@ describe("useCompiler", () => {
   });
 
   it("compile error with errors array sets status to error", async () => {
-    const axiosErr = makeAxiosError({
-      detail: { errors: [{ line: 5, message: "Undefined control sequence" }] },
-    });
-    mockApi.post.mockRejectedValue(axiosErr);
+    mockCompileLatex.mockRejectedValue(
+      new CompileRequestError([
+        { line: 5, message: "Undefined control sequence" },
+      ])
+    );
 
     const { result } = renderHook(() => useCompiler(""));
 
@@ -112,8 +89,9 @@ describe("useCompiler", () => {
   });
 
   it("compile error with detail string sets single error", async () => {
-    const axiosErr = makeAxiosError({ detail: "LaTeX compilation failed" });
-    mockApi.post.mockRejectedValue(axiosErr);
+    mockCompileLatex.mockRejectedValue(
+      new CompileRequestError([{ line: 0, message: "LaTeX compilation failed" }])
+    );
 
     const { result } = renderHook(() => useCompiler(""));
 
@@ -127,7 +105,7 @@ describe("useCompiler", () => {
   });
 
   it("network error sets generic error message", async () => {
-    mockApi.post.mockRejectedValue(new Error("Network Error"));
+    mockCompileLatex.mockRejectedValue(new Error("Network Error"));
 
     const { result } = renderHook(() => useCompiler(""));
 
@@ -146,12 +124,12 @@ describe("useCompiler", () => {
       await result.current.compile("   ");
     });
 
-    expect(mockApi.post).not.toHaveBeenCalled();
+    expect(mockCompileLatex).not.toHaveBeenCalled();
     expect(result.current.status).toBe("idle");
   });
 
   it("auto-compiles when latex prop has content", async () => {
-    mockApi.post.mockResolvedValue({ data: new ArrayBuffer(4) });
+    mockCompileLatex.mockResolvedValue(new Uint8Array(4));
 
     renderHook(() => useCompiler("\\documentclass{article}"));
 
@@ -159,10 +137,9 @@ describe("useCompiler", () => {
     // due to our mock). Flush microtasks for the API call to resolve.
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(mockApi.post).toHaveBeenCalledWith(
-      "/api/compile",
-      { latex: "\\documentclass{article}" },
-      expect.objectContaining({ responseType: "arraybuffer" }),
+    expect(mockCompileLatex).toHaveBeenCalledWith(
+      "\\documentclass{article}",
+      expect.any(AbortSignal)
     );
   });
 });

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
@@ -10,7 +9,10 @@ interface PreviewPanelProps {
   className?: string;
 }
 
-function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
+export default function PreviewPanel({
+  pdfData,
+  className = "",
+}: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -153,14 +155,3 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
     </div>
   );
 }
-
-const PreviewPanel = dynamic(() => Promise.resolve(PreviewPanelInner), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-bg-deep">
-      <span className="text-sm text-text-secondary">Loading preview...</span>
-    </div>
-  ),
-});
-
-export default PreviewPanel;

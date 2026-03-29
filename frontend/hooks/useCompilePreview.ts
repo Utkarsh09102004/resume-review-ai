@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
 import {
+  CompileRequestError,
   compileLatex,
   extractCompileErrors,
   type CompileError,
@@ -41,11 +41,15 @@ export function useCompilePreview() {
       setStatus("compiled");
       setCompiledAt(Date.now());
     } catch (error) {
-      if (axios.isCancel(error)) {
+      if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
 
-      setErrors(extractCompileErrors(error));
+      if (error instanceof CompileRequestError) {
+        setErrors(error.errors);
+      } else {
+        setErrors(extractCompileErrors(error));
+      }
       setStatus("error");
     }
   }, []);

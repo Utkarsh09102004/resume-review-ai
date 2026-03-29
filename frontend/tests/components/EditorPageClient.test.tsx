@@ -15,17 +15,21 @@ import {
   fireEvent,
 } from "@testing-library/react";
 import React from "react";
-import EditorWorkspace from "@/components/editor/EditorWorkspace";
+import EditorWorkspaceClient from "@/components/editor/EditorWorkspaceClient";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const { mockSaveResumeLatexAction, mockRenameResumeAction, mockApiPost } =
+const {
+  mockSaveResumeLatexAction,
+  mockRenameResumeAction,
+  mockCompileLatexDocument,
+} =
   vi.hoisted(() => ({
     mockSaveResumeLatexAction: vi.fn(),
     mockRenameResumeAction: vi.fn(),
-    mockApiPost: vi.fn(),
+    mockCompileLatexDocument: vi.fn(),
   }));
 
 vi.mock("@/app/(app)/editor/[id]/actions", () => ({
@@ -44,16 +48,8 @@ vi.mock("@/hooks/useCompiler", () => ({
   }),
 }));
 
-vi.mock("next/dynamic", () => ({
-  default: () => {
-    return function DynamicStub() {
-      return React.createElement("div", { "data-testid": "dynamic-stub" });
-    };
-  },
-}));
-
-vi.mock("@/lib/api", () => ({
-  default: { post: (...args: unknown[]) => mockApiPost(...args) },
+vi.mock("@/lib/compile", () => ({
+  compileLatexDocument: (...args: unknown[]) => mockCompileLatexDocument(...args),
 }));
 
 vi.mock("@/components/editor/EditorPanel", () => ({
@@ -90,20 +86,14 @@ vi.mock("@/components/editor/SplitPane", () => ({
 // ---------------------------------------------------------------------------
 
 function renderEditor() {
-  const initialResume = {
-    id: "test-id",
-    user_id: "u1",
-    parent_id: null,
-    title: "My Resume",
-    latex_source: "\\documentclass{article}",
-    created_at: "2025-01-01T00:00:00Z",
-    updated_at: "2025-01-01T00:00:00Z",
-  };
-
   return render(
-    <EditorWorkspace
-      initialResume={initialResume}
-      parentResume={null}
+    <EditorWorkspaceClient
+      initialDocument={{
+        id: "test-id",
+        title: "My Resume",
+        latexSource: "\\documentclass{article}",
+      }}
+      parentTitle={null}
       user={{ name: "User" }}
     />
   );
@@ -116,7 +106,7 @@ function renderEditor() {
 describe("EditorWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockApiPost.mockResolvedValue({ data: new ArrayBuffer(8) });
+    mockCompileLatexDocument.mockResolvedValue(new Uint8Array(8));
     mockSaveResumeLatexAction.mockResolvedValue({
       id: "test-id",
       user_id: "u1",
@@ -155,7 +145,9 @@ describe("EditorWorkspace", () => {
   it("saves updated latex through the server action", async () => {
     renderEditor();
 
-    const editor = screen.getAllByRole("textbox", { name: "Editor" })[0];
+    const editor = (await screen.findAllByRole("textbox", {
+      name: "Editor",
+    }))[0];
     fireEvent.change(editor, { target: { value: "\\updated{}" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -183,5 +175,50 @@ describe("EditorWorkspace", () => {
         "Renamed Resume"
       );
     });
+  });
+
+  it("downloads PDFs through the Next compile proxy helper", async () => {
+    const originalCreateElement = document.createElement.bind(document);
+    const anchor = originalCreateElement("a");
+    const click = vi.spyOn(anchor, "click").mockImplementation(() => undefined);
+    const createObjectUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:preview");
+    const revokeObjectUrl = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const appendChild = vi.spyOn(document.body, "appendChild");
+    const removeChild = vi.spyOn(document.body, "removeChild");
+    const createElement = vi
+      .spyOn(document, "createElement")
+      .mockImplementation(((tagName: string) => {
+        if (tagName === "a") {
+          return anchor;
+        }
+
+        return originalCreateElement(tagName);
+      }) as typeof document.createElement);
+
+    renderEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Download PDF" }));
+
+    await waitFor(() => {
+    expect(mockCompileLatexDocument).toHaveBeenCalledWith(
+        "\\documentclass{article}"
+      );
+    });
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(appendChild).toHaveBeenCalled();
+    expect(removeChild).toHaveBeenCalled();
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:preview");
+
+    createElement.mockRestore();
+    appendChild.mockRestore();
+    removeChild.mockRestore();
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
+    click.mockRestore();
   });
 });

@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock @logto/next/server-actions
 const mockSignIn = vi.fn();
 const mockSignOut = vi.fn();
 const mockHandleSignIn = vi.fn();
+const mockCreateAuthenticatedApi = vi.fn();
+const mockCompilePost = vi.fn();
 
 vi.mock("@logto/next/server-actions", () => ({
   signIn: (...args: unknown[]) => mockSignIn(...args),
@@ -14,7 +16,99 @@ vi.mock("@logto/next/server-actions", () => ({
   getAccessTokenRSC: vi.fn(),
 }));
 
+vi.mock("@/lib/api", () => ({
+  createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
+}));
+
 describe("Next route handlers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("proxies compile requests through the authenticated API client", async () => {
+    mockCreateAuthenticatedApi.mockResolvedValue({ post: mockCompilePost });
+    mockCompilePost.mockResolvedValue({
+      data: new Uint8Array([1, 2, 3]).buffer,
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": 'attachment; filename="resume.pdf"',
+      },
+    });
+
+    const { POST } = await import("@/app/api/compile/route");
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latex: "\\documentclass{article}" }),
+      })
+    );
+
+    expect(mockCompilePost).toHaveBeenCalledWith(
+      "/api/compile",
+      { latex: "\\documentclass{article}" },
+      expect.objectContaining({
+        responseType: "arraybuffer",
+        validateStatus: expect.any(Function),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/pdf");
+    expect(response.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="resume.pdf"'
+    );
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3])
+    );
+  });
+
+  it("forwards backend compile errors without rewriting the payload", async () => {
+    mockCreateAuthenticatedApi.mockResolvedValue({ post: mockCompilePost });
+    mockCompilePost.mockResolvedValue({
+      data: new TextEncoder().encode(
+        JSON.stringify({ detail: "LaTeX compilation failed" })
+      ).buffer,
+      status: 422,
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+
+    const { POST } = await import("@/app/api/compile/route");
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latex: "\\bad" }),
+      })
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      detail: "LaTeX compilation failed",
+    });
+  });
+
+  it("rejects invalid compile request bodies", async () => {
+    const { POST } = await import("@/app/api/compile/route");
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not-json",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      detail: "Invalid JSON body",
+    });
+  });
+
   describe("sign-in route", () => {
     it("calls signIn with correct config and redirect URI", async () => {
       const { GET } = await import("@/app/api/logto/sign-in/route");

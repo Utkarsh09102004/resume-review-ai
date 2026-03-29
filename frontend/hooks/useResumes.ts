@@ -92,14 +92,9 @@ export function useResumes() {
 
   const createSubResume = useCallback(
     async (parentId: string, title: string): Promise<string> => {
-      // Copy parent's latex_source
-      const parentResp = await api.get<ResumeFromAPI>(
-        `/api/resumes/${parentId}`
-      );
       const resp = await api.post<ResumeFromAPI>("/api/resumes/", {
         title,
         parent_id: parentId,
-        latex_source: parentResp.data.latex_source,
       });
       await fetchResumes();
       return resp.data.id;
@@ -120,7 +115,6 @@ export function useResumes() {
       const original = await api.get<ResumeFromAPI>(`/api/resumes/${id}`);
       const resp = await api.post<ResumeFromAPI>("/api/resumes/", {
         title: `${original.data.title} (copy)`,
-        parent_id: original.data.parent_id,
         latex_source: original.data.latex_source,
       });
       await fetchResumes();

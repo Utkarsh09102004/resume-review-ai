@@ -62,11 +62,19 @@ export function useCompiler(latex: string) {
           try {
             const errorText = new TextDecoder().decode(err.response.data);
             const errorJson = JSON.parse(errorText);
-            // The backend may return { detail: string } or { errors: [...] }
-            if (errorJson.errors && Array.isArray(errorJson.errors)) {
-              setErrors(errorJson.errors);
-            } else if (errorJson.detail) {
-              setErrors([{ line: 0, message: errorJson.detail }]);
+            const detail: unknown = errorJson.detail;
+
+            if (typeof detail === "object" && detail !== null) {
+              const obj = detail as Record<string, unknown>;
+              if (Array.isArray(obj.errors)) {
+                setErrors(obj.errors as CompileError[]);
+              } else if (typeof obj.log === "string") {
+                setErrors([{ line: 0, message: obj.log }]);
+              } else {
+                setErrors([{ line: 0, message: JSON.stringify(detail) }]);
+              }
+            } else if (typeof detail === "string") {
+              setErrors([{ line: 0, message: detail }]);
             } else {
               setErrors([{ line: 0, message: "Compilation failed" }]);
             }

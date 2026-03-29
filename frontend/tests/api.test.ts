@@ -68,18 +68,16 @@ describe('createAuthenticatedApi', () => {
     expect(mockGetAccessTokenRSC).not.toHaveBeenCalled();
   });
 
-  it('returns plain client when the server token helper does not resolve a token', async () => {
+  it('throws when the server token helper does not resolve a token', async () => {
     process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
     mockGetAccessToken.mockResolvedValueOnce(undefined);
 
-    const { createAuthenticatedApi } = await import('@/lib/api');
-    const client = await createAuthenticatedApi();
+    const { createAuthenticatedApi, MissingAuthenticatedTokenError } =
+      await import('@/lib/api');
 
-    expect(client.defaults.baseURL).toBe('http://localhost:8000');
-    const authHeader =
-      client.defaults.headers?.Authorization ??
-      client.defaults.headers?.common?.Authorization;
-    expect(authHeader).toBeUndefined();
+    await expect(createAuthenticatedApi()).rejects.toBeInstanceOf(
+      MissingAuthenticatedTokenError
+    );
     expect(mockGetAccessToken).toHaveBeenCalledTimes(1);
     expect(mockGetAccessTokenRSC).not.toHaveBeenCalled();
   });
@@ -111,18 +109,16 @@ describe('createAuthenticatedApiRSC', () => {
     expect(mockGetAccessTokenRSC).toHaveBeenCalledTimes(1);
   });
 
-  it('returns plain client when the RSC token helper does not resolve a token', async () => {
+  it('throws when the RSC token helper does not resolve a token', async () => {
     process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
     mockGetAccessTokenRSC.mockResolvedValueOnce(undefined);
 
-    const { createAuthenticatedApiRSC } = await import('@/lib/api');
-    const client = await createAuthenticatedApiRSC();
+    const { createAuthenticatedApiRSC, MissingAuthenticatedTokenError } =
+      await import('@/lib/api');
 
-    expect(client.defaults.baseURL).toBe('http://localhost:8000');
-    const authHeader =
-      client.defaults.headers?.Authorization ??
-      client.defaults.headers?.common?.Authorization;
-    expect(authHeader).toBeUndefined();
+    await expect(createAuthenticatedApiRSC()).rejects.toBeInstanceOf(
+      MissingAuthenticatedTokenError
+    );
     expect(mockGetAccessToken).not.toHaveBeenCalled();
     expect(mockGetAccessTokenRSC).toHaveBeenCalledTimes(1);
   });

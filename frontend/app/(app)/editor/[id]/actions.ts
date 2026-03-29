@@ -2,9 +2,14 @@
 
 import axios from "axios";
 import { revalidatePath } from "next/cache";
-import { createAuthenticatedApi } from "@/lib/api";
+import {
+  createAuthenticatedApi,
+  isMissingAuthenticatedTokenError,
+} from "@/lib/api";
 import { requireUserDisplayInfo } from "@/lib/auth";
 import type { ResumeFromAPI } from "@/lib/resumes";
+
+const AUTHENTICATION_ERROR = "Authentication required. Please sign in again.";
 
 interface ResumeUpdateInput {
   title?: string;
@@ -16,9 +21,9 @@ async function updateResume(
   updates: ResumeUpdateInput
 ): Promise<ResumeFromAPI> {
   await requireUserDisplayInfo();
-  const api = await createAuthenticatedApi();
 
   try {
+    const api = await createAuthenticatedApi();
     const response = await api.put<ResumeFromAPI>(
       `/api/resumes/${resumeId}`,
       updates
@@ -27,6 +32,10 @@ async function updateResume(
     revalidatePath(`/editor/${resumeId}`);
     return response.data;
   } catch (error) {
+    if (isMissingAuthenticatedTokenError(error)) {
+      throw new Error(AUTHENTICATION_ERROR);
+    }
+
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       throw new Error("Resume not found");
     }

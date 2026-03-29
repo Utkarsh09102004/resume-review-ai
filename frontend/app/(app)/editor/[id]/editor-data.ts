@@ -1,7 +1,11 @@
 import "server-only";
 
 import axios from "axios";
-import { createAuthenticatedApiRSC } from "@/lib/api";
+import { redirect } from "next/navigation";
+import {
+  createAuthenticatedApiRSC,
+  isMissingAuthenticatedTokenError,
+} from "@/lib/api";
 import type { ResumeFromAPI } from "@/lib/resumes";
 
 export interface EditorPageData {
@@ -10,7 +14,17 @@ export interface EditorPageData {
 }
 
 async function getResumeOrNull(id: string): Promise<ResumeFromAPI | null> {
-  const api = await createAuthenticatedApiRSC();
+  let api;
+
+  try {
+    api = await createAuthenticatedApiRSC();
+  } catch (error) {
+    if (isMissingAuthenticatedTokenError(error)) {
+      redirect("/api/logto/sign-in");
+    }
+
+    throw error;
+  }
 
   try {
     const response = await api.get<ResumeFromAPI>(`/api/resumes/${id}`);

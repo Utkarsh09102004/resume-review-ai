@@ -32,6 +32,9 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/api", () => ({
   createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
   createAuthenticatedApiRSC: () => mockCreateAuthenticatedApi(),
+  isMissingAuthenticatedTokenError: (error: unknown) =>
+    error instanceof Error &&
+    error.name === "MissingAuthenticatedTokenError",
 }));
 
 vi.mock("next/navigation", () => ({

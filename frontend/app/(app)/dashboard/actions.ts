@@ -3,10 +3,14 @@
 import { isAxiosError } from "axios";
 import { revalidatePath } from "next/cache";
 import { requireUserDisplayInfo } from "@/lib/auth";
-import { createAuthenticatedApi } from "@/lib/api";
+import {
+  createAuthenticatedApi,
+  isMissingAuthenticatedTokenError,
+} from "@/lib/api";
 import type { ResumeFromAPI } from "@/lib/resumes";
 
 const DASHBOARD_PATH = "/dashboard";
+const AUTHENTICATION_ERROR = "Authentication required. Please sign in again.";
 
 export type DashboardActionResult =
   | { ok: true; resumeId?: string }
@@ -56,7 +60,9 @@ export async function createResumeAction(
     console.error("createResumeAction error:", error);
     return {
       ok: false,
-      error: getApiErrorMessage(error, "Failed to create resume"),
+      error: isMissingAuthenticatedTokenError(error)
+        ? AUTHENTICATION_ERROR
+        : getApiErrorMessage(error, "Failed to create resume"),
     };
   }
 }
@@ -83,7 +89,9 @@ export async function createSubResumeAction(
     console.error("createSubResumeAction error:", error);
     return {
       ok: false,
-      error: getApiErrorMessage(error, "Failed to create sub-resume"),
+      error: isMissingAuthenticatedTokenError(error)
+        ? AUTHENTICATION_ERROR
+        : getApiErrorMessage(error, "Failed to create sub-resume"),
     };
   }
 }
@@ -107,7 +115,9 @@ export async function renameResumeAction(
     console.error("renameResumeAction error:", error);
     return {
       ok: false,
-      error: getApiErrorMessage(error, "Failed to rename resume"),
+      error: isMissingAuthenticatedTokenError(error)
+        ? AUTHENTICATION_ERROR
+        : getApiErrorMessage(error, "Failed to rename resume"),
     };
   }
 }
@@ -133,7 +143,9 @@ export async function duplicateResumeAction(
     console.error("duplicateResumeAction error:", error);
     return {
       ok: false,
-      error: getApiErrorMessage(error, "Failed to duplicate resume"),
+      error: isMissingAuthenticatedTokenError(error)
+        ? AUTHENTICATION_ERROR
+        : getApiErrorMessage(error, "Failed to duplicate resume"),
     };
   }
 }
@@ -151,7 +163,9 @@ export async function deleteResumeAction(
     console.error("deleteResumeAction error:", error);
     return {
       ok: false,
-      error: getApiErrorMessage(error, "Failed to delete resume"),
+      error: isMissingAuthenticatedTokenError(error)
+        ? AUTHENTICATION_ERROR
+        : getApiErrorMessage(error, "Failed to delete resume"),
     };
   }
 }

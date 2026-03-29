@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { createAuthenticatedApi } from "@/lib/api";
+import {
+  createAuthenticatedApi,
+  isMissingAuthenticatedTokenError,
+} from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -33,7 +36,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const api = await createAuthenticatedApi();
+  let api;
+
+  try {
+    api = await createAuthenticatedApi();
+  } catch (error) {
+    if (isMissingAuthenticatedTokenError(error)) {
+      return NextResponse.json(
+        { detail: error.message },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    throw error;
+  }
 
   try {
     const response = await api.post<ArrayBuffer>("/api/compile", payload, {

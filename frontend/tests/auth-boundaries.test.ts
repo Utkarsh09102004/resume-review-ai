@@ -8,6 +8,7 @@ const {
   mockGet,
   mockPost,
   mockPut,
+  mockRedirect,
 } = vi.hoisted(() => {
   const getAccessToken = vi.fn<() => Promise<string | undefined>>(
     async () => "server-token"
@@ -45,6 +46,7 @@ const {
     mockGet: get,
     mockPost: post,
     mockPut: put,
+    mockRedirect: vi.fn(),
   };
 });
 
@@ -55,6 +57,13 @@ vi.mock("@logto/next/server-actions", () => ({
   signIn: vi.fn(),
   signOut: vi.fn(),
   handleSignIn: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  redirect: (...args: unknown[]) => {
+    mockRedirect(...args);
+    throw new Error("NEXT_REDIRECT");
+  },
 }));
 
 vi.mock("axios", async () => {
@@ -98,6 +107,7 @@ describe("auth token lookup boundaries", () => {
     mockGet.mockReset();
     mockPost.mockReset();
     mockPut.mockReset();
+    mockRedirect.mockReset();
   });
 
   afterEach(() => {
@@ -124,6 +134,21 @@ describe("auth token lookup boundaries", () => {
       "Bearer rsc-token"
     );
     expect(mockGet).toHaveBeenCalledWith("/api/resumes/");
+  });
+
+  it("redirects to sign-in when the dashboard loader cannot resolve an auth token", async () => {
+    mockGetAccessTokenRSC.mockResolvedValueOnce(undefined);
+
+    const { getDashboardPageData } = await import(
+      "@/app/(app)/dashboard/dashboard-data"
+    );
+
+    await expect(getDashboardPageData()).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+    expect(mockGetAccessTokenRSC).toHaveBeenCalledTimes(1);
+    expect(mockRedirect).toHaveBeenCalledWith("/api/logto/sign-in");
+    expect(mockGet).not.toHaveBeenCalled();
   });
 
   it("uses the RSC token helper for the editor server loader", async () => {
@@ -182,6 +207,23 @@ describe("auth token lookup boundaries", () => {
     expect(mockPost).toHaveBeenCalledWith("/api/resumes/", {
       title: "Resume",
     });
+  });
+
+  it("fails dashboard actions before backend calls when the server token is missing", async () => {
+    mockGetAccessToken.mockResolvedValueOnce(undefined);
+
+    const { createResumeAction } = await import(
+      "@/app/(app)/dashboard/actions"
+    );
+
+    await expect(createResumeAction("Resume")).resolves.toEqual({
+      ok: false,
+      error: "Authentication required. Please sign in again.",
+    });
+
+    expect(mockGetAccessToken).toHaveBeenCalledTimes(1);
+    expect(mockGetAccessTokenRSC).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
   });
 
   it("uses the server-action token helper for editor actions", async () => {
@@ -251,5 +293,27 @@ describe("auth token lookup boundaries", () => {
         validateStatus: expect.any(Function),
       })
     );
+  });
+
+  it("fails compile proxy requests before backend calls when the server token is missing", async () => {
+    mockGetAccessToken.mockResolvedValueOnce(undefined);
+
+    const { POST } = await import("@/app/api/compile/route");
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latex: "\\documentclass{article}" }),
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      detail: "Authentication required. Please sign in again.",
+    });
+    expect(mockGetAccessToken).toHaveBeenCalledTimes(1);
+    expect(mockGetAccessTokenRSC).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
   });
 });

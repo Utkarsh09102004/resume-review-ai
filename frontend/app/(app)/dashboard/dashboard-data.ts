@@ -1,6 +1,10 @@
 import "server-only";
 
-import { createAuthenticatedApiRSC } from "@/lib/api";
+import { redirect } from "next/navigation";
+import {
+  createAuthenticatedApiRSC,
+  isMissingAuthenticatedTokenError,
+} from "@/lib/api";
 import { groupResumes } from "@/lib/resumes";
 import type { ResumeFromAPI, ResumeGroup } from "@/lib/resumes";
 
@@ -19,6 +23,10 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
       error: null,
     };
   } catch (error) {
+    if (isMissingAuthenticatedTokenError(error)) {
+      redirect("/api/logto/sign-in");
+    }
+
     console.error("getDashboardPageData error:", error);
 
     return {

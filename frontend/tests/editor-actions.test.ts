@@ -20,6 +20,9 @@ const {
 
 vi.mock("@/lib/api", () => ({
   createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
+  isMissingAuthenticatedTokenError: (error: unknown) =>
+    error instanceof Error &&
+    error.name === "MissingAuthenticatedTokenError",
 }));
 
 vi.mock("@/lib/auth", () => ({

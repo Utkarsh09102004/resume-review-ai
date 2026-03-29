@@ -18,6 +18,9 @@ vi.mock("@logto/next/server-actions", () => ({
 
 vi.mock("@/lib/api", () => ({
   createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
+  isMissingAuthenticatedTokenError: (error: unknown) =>
+    error instanceof Error &&
+    error.name === "MissingAuthenticatedTokenError",
 }));
 
 describe("Next route handlers", () => {
@@ -90,6 +93,28 @@ describe("Next route handlers", () => {
     await expect(response.json()).resolves.toEqual({
       detail: "LaTeX compilation failed",
     });
+  });
+
+  it("fails fast when the authenticated compile client cannot resolve a token", async () => {
+    const authError = new Error("Authentication required. Please sign in again.");
+    authError.name = "MissingAuthenticatedTokenError";
+    mockCreateAuthenticatedApi.mockRejectedValueOnce(authError);
+
+    const { POST } = await import("@/app/api/compile/route");
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latex: "\\documentclass{article}" }),
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      detail: "Authentication required. Please sign in again.",
+    });
+    expect(mockCompilePost).not.toHaveBeenCalled();
   });
 
   it("rejects invalid compile request bodies", async () => {

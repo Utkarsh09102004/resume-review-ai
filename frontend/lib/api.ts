@@ -8,8 +8,21 @@ const api = axios.create({
   },
 });
 
+export class MissingAuthenticatedTokenError extends Error {
+  constructor() {
+    super('Authentication required. Please sign in again.');
+    this.name = 'MissingAuthenticatedTokenError';
+  }
+}
+
+export function isMissingAuthenticatedTokenError(
+  error: unknown
+): error is MissingAuthenticatedTokenError {
+  return error instanceof MissingAuthenticatedTokenError;
+}
+
 /**
- * Build an API client by attaching a Bearer token when available.
+ * Build an API client by attaching a Bearer token.
  */
 async function createApiWithToken(
   getToken: () => Promise<string | undefined>
@@ -21,7 +34,7 @@ async function createApiWithToken(
   const token = await getToken();
 
   if (!token) {
-    return api;
+    throw new MissingAuthenticatedTokenError();
   }
 
   return axios.create({
@@ -42,6 +55,7 @@ async function createApiWithToken(
  *
  * In dev mode (AUTH_ENABLED != "true") this returns the plain client
  * without an Authorization header — the backend defaults to a dev user.
+ * When auth is enabled, token lookup failure is treated as an auth error.
  */
 export async function createAuthenticatedApi() {
   const { getAuthAccessToken } = await import('./auth');

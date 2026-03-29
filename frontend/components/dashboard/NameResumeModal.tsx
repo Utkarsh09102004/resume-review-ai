@@ -77,7 +77,7 @@ export default function NameResumeModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-bg-deep/60 backdrop-blur-sm animate-[fadeIn_200ms_ease-out]"
+        className="fixed inset-0 bg-bg-deep/72 backdrop-blur-[2px] animate-[fadeIn_200ms_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -85,7 +85,7 @@ export default function NameResumeModal({
       {/* Modal */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <div
-          className="relative w-full max-w-md rounded-xl border border-bg-border bg-bg-surface p-6 shadow-2xl animate-[modalIn_200ms_ease-out]"
+          className="dashboard-panel dashboard-panel--strong relative w-full max-w-md p-6 animate-[modalIn_200ms_ease-out]"
           role="document"
         >
           <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
@@ -102,7 +102,7 @@ export default function NameResumeModal({
               onChange={(e) => setName(e.target.value)}
               maxLength={255}
               placeholder="Enter a name..."
-              className="w-full rounded-lg border border-bg-border bg-bg-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none transition-colors focus:border-accent-amber focus:ring-1 focus:ring-accent-amber"
+              className="dashboard-input w-full px-3 py-2.5 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none"
               aria-label="Resume name"
             />
 
@@ -111,14 +111,14 @@ export default function NameResumeModal({
                 type="button"
                 onClick={onClose}
                 disabled={isPending}
-                className="rounded-lg border border-bg-border bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-surface cursor-pointer"
+                className="dashboard-button dashboard-button--secondary cursor-pointer px-4 py-2 text-sm font-medium text-text-primary"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!isValid || isPending}
-                className="rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-bg-deep transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                className="dashboard-button dashboard-button--primary cursor-pointer px-4 py-2 text-sm font-semibold disabled:opacity-40"
               >
                 {isPending ? pendingLabel : confirmLabel}
               </button>

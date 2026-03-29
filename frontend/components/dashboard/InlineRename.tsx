@@ -57,7 +57,7 @@ export default function InlineRename({
       onKeyDown={handleKeyDown}
       onBlur={handleBlur}
       className={[
-        "w-full bg-transparent border-b border-accent-amber/80 px-0 py-1 text-sm font-semibold text-text-primary outline-none",
+        "dashboard-inline-input w-full bg-transparent px-0 py-1 text-sm font-semibold text-text-primary outline-none",
         className ?? "",
       ].join(" ")}
       aria-label="Rename"

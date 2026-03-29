@@ -45,7 +45,7 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
         ref={buttonRef}
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-bg-border/70 bg-bg-elevated/55 text-text-secondary transition-colors hover:border-accent-amber/25 hover:text-text-primary cursor-pointer"
+        className="dashboard-icon-button h-9 w-9 cursor-pointer"
         aria-label="More actions"
         aria-expanded={open}
         aria-haspopup="menu"
@@ -55,7 +55,7 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
 
       {open ? (
         <div
-          className="absolute right-0 top-full z-50 mt-2 w-44 rounded-2xl border border-bg-border/80 bg-bg-surface/95 p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
+          className="dashboard-menu-panel absolute right-0 top-full z-50 mt-2 w-44 p-1.5"
           role="menu"
         >
           {items.map((item) => (
@@ -67,7 +67,7 @@ function ResumeMenu({ items }: SharedResumeMenuProps) {
                 item.onSelect();
                 setOpen(false);
               }}
-              className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-bg-elevated/80 cursor-pointer ${
+              className={`dashboard-menu-item flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm ${
                 item.tone === "danger" ? "text-status-error" : "text-text-primary"
               }`}
             >

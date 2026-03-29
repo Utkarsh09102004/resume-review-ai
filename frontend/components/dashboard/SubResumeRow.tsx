@@ -35,11 +35,11 @@ export default function SubResumeRow({
   onCancelRename,
 }: SubResumeRowProps) {
   return (
-    <article className="rounded-[24px] border border-bg-border/75 bg-[linear-gradient(180deg,rgba(35,35,46,0.86),rgba(27,27,36,0.82))] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.18)] transition-colors hover:border-accent-amber/20">
+    <article className="dashboard-panel dashboard-panel--interactive rounded-[24px] p-4">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="inline-flex items-center gap-2 rounded-full border border-bg-border/80 bg-bg-elevated/45 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-text-secondary/85">
+            <div className="dashboard-chip px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary/85">
               <FileText size={12} className="text-accent-amber" />
               Tailored Version
             </div>
@@ -62,7 +62,7 @@ export default function SubResumeRow({
                 >
                   {resume.title}
                 </h4>
-                <p className="mt-1 text-xs tabular-nums text-text-secondary">
+                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] tabular-nums text-text-secondary/75">
                   Updated {formatDate(resume.updatedAt)}
                 </p>
               </>
@@ -73,7 +73,7 @@ export default function SubResumeRow({
             <button
               type="button"
               onClick={() => onOpen(resume.id)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-accent-amber px-3.5 text-sm font-semibold text-bg-deep transition hover:brightness-110 cursor-pointer"
+              className="dashboard-button dashboard-button--primary h-10 cursor-pointer px-3.5 text-sm font-semibold"
               aria-label={`Open ${resume.title}`}
             >
               <ArrowUpRight size={14} />
@@ -82,7 +82,7 @@ export default function SubResumeRow({
             <button
               type="button"
               onClick={() => onRequestRename(resume.id)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-bg-border/80 bg-bg-elevated/45 px-3.5 text-sm font-medium text-text-primary transition-colors hover:border-accent-amber/30 hover:text-accent-amber cursor-pointer"
+              className="dashboard-button dashboard-button--secondary h-10 cursor-pointer px-3.5 text-sm font-medium text-text-primary"
               aria-label={`Rename ${resume.title}`}
             >
               <PencilLine size={14} />
@@ -96,7 +96,7 @@ export default function SubResumeRow({
         </div>
 
         {isRenaming && onRename && onCancelRename ? (
-          <div className="text-xs tabular-nums text-text-secondary">
+          <div className="text-[11px] uppercase tracking-[0.14em] tabular-nums text-text-secondary/75">
             Updated {formatDate(resume.updatedAt)}
           </div>
         ) : null}

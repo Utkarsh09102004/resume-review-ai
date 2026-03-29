@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -69,24 +69,37 @@ function pluralize(value: number, singular: string, plural: string) {
   return `${formatMetric(value)} ${value === 1 ? singular : plural}`;
 }
 
+function enterDelay(delayMs: number): CSSProperties | undefined {
+  if (delayMs <= 0) {
+    return undefined;
+  }
+
+  return { animationDelay: `${delayMs}ms` };
+}
+
 function DashboardMetricCard({
   icon: Icon,
   label,
   value,
   helper,
+  delayMs = 0,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   helper: string;
+  delayMs?: number;
 }) {
   return (
-    <article className="rounded-[24px] border border-bg-border/80 bg-bg-surface/85 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+    <article
+      className="dashboard-panel dashboard-panel--interactive dashboard-enter p-5 sm:p-6"
+      style={enterDelay(delayMs)}
+    >
       <div className="flex items-center justify-between gap-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-secondary/80">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/80">
           {label}
         </p>
-        <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-bg-border/80 bg-bg-elevated/80 text-accent-amber">
+        <span className="dashboard-icon-chip h-11 w-11">
           <Icon size={18} />
         </span>
       </div>
@@ -106,7 +119,7 @@ function ControlSlotChip({
   label: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-bg-border/80 bg-bg-elevated/60 px-3 py-2 text-xs font-medium text-text-secondary">
+    <div className="dashboard-chip px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
       <Icon size={14} />
       {label}
     </div>
@@ -143,7 +156,7 @@ function InlineErrorPanel({
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-status-error/35 px-4 text-sm font-medium text-text-primary transition-colors hover:bg-status-error/10"
+          className="dashboard-button inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-status-error/35 px-4 text-sm font-medium text-text-primary hover:bg-status-error/10"
         >
           Try again
         </button>
@@ -261,22 +274,21 @@ export default function DashboardPageClient({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-bg-deep">
+    <div className="dashboard-app flex min-h-dvh flex-col bg-bg-deep">
       <Toolbar user={user} />
 
       <main className="dashboard-shell flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:gap-10 lg:px-8 lg:py-10">
           <section className="grid gap-5 lg:grid-cols-12 lg:gap-6">
-            <div className="relative overflow-hidden rounded-[32px] border border-bg-border/80 bg-[linear-gradient(135deg,rgba(30,30,40,0.98),rgba(22,22,30,0.92))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-8 lg:col-span-7 lg:p-10">
-              <div
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(232,168,69,0.18),transparent_40%),linear-gradient(180deg,transparent,rgba(15,15,20,0.32))]"
-                aria-hidden="true"
-              />
+            <div
+              className="dashboard-panel dashboard-panel--strong dashboard-panel--hero dashboard-enter p-6 sm:p-8 lg:col-span-7 lg:p-10"
+              style={enterDelay(0)}
+            >
               <div className="relative">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-accent-amber/90">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-accent-amber/90">
                   Resume Workspace
                 </p>
-                <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl">
+                <h1 className="mt-5 max-w-3xl text-5xl font-semibold tracking-[-0.04em] text-text-primary sm:text-6xl">
                   My Resumes
                 </h1>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-text-secondary sm:text-base">
@@ -284,31 +296,34 @@ export default function DashboardPageClient({
                   role, and pick up the latest draft without leaving the
                   workspace.
                 </p>
-                <div className="mt-8 flex flex-wrap gap-3 text-xs font-medium text-text-secondary">
-                  <div className="rounded-full border border-bg-border/80 bg-bg-elevated/60 px-3 py-2">
+                <div className="mt-8 flex flex-wrap gap-3 text-text-secondary">
+                  <div className="dashboard-chip px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
                     Base resume first
                   </div>
-                  <div className="rounded-full border border-bg-border/80 bg-bg-elevated/60 px-3 py-2">
+                  <div className="dashboard-chip px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
                     Tailored versions attached in each card
                   </div>
-                  <div className="rounded-full border border-bg-border/80 bg-bg-elevated/60 px-3 py-2">
+                  <div className="dashboard-chip px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
                     Continue from recent work
                   </div>
                 </div>
               </div>
             </div>
 
-            <aside className="relative overflow-hidden rounded-[32px] border border-bg-border/80 bg-bg-surface/90 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.24)] backdrop-blur-sm sm:p-8 lg:col-span-5">
+            <aside
+              className="dashboard-panel dashboard-panel--cta dashboard-enter p-6 sm:p-8 lg:col-span-5"
+              style={enterDelay(40)}
+            >
               <div
                 className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-accent-amber/60 to-transparent"
                 aria-hidden="true"
               />
-              <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-text-secondary/80">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/80">
                 Primary Action
               </p>
               <div className="mt-5 flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-text-primary">
+                  <h2 className="text-2xl font-semibold tracking-[-0.03em] text-text-primary">
                     Create a new base resume
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-text-secondary">
@@ -316,7 +331,7 @@ export default function DashboardPageClient({
                     versions underneath it when a role needs a custom story.
                   </p>
                 </div>
-                <span className="hidden rounded-full border border-accent-amber/25 bg-accent-amber/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-accent-amber sm:inline-flex">
+                <span className="dashboard-chip dashboard-chip--accent hidden px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] sm:inline-flex">
                   Hero CTA
                 </span>
               </div>
@@ -329,13 +344,15 @@ export default function DashboardPageClient({
                 />
               </div>
 
-              <div className="mt-5 flex items-start gap-3 rounded-2xl border border-bg-border/80 bg-bg-elevated/45 p-4">
+              <div className="mt-5 rounded-[22px] border border-[color:var(--dashboard-border-subtle)] bg-[rgba(29,30,39,0.58)] p-4">
+                <div className="flex items-start gap-3">
                 <ArrowUpRight size={18} className="mt-0.5 shrink-0 text-accent-amber" />
                 <p className="text-sm leading-7 text-text-secondary">
                   The toolbar stays product-level on this screen. Creation
                   starts in the hero, while editing and branching continue in
                   the workspace below.
                 </p>
+                </div>
               </div>
             </aside>
           </section>
@@ -350,6 +367,7 @@ export default function DashboardPageClient({
                   ? `${pluralize(baseResumeCount, "primary resume", "primary resumes")} anchoring your workspace`
                   : "No base resumes yet"
               }
+              delayMs={80}
             />
             <DashboardMetricCard
               icon={FileStack}
@@ -360,22 +378,24 @@ export default function DashboardPageClient({
                   ? `${pluralize(tailoredResumeCount, "version", "versions")} attached to base resumes`
                   : "No tailored versions yet"
               }
+              delayMs={120}
             />
             <DashboardMetricCard
               icon={Clock3}
               label="Recently Updated"
               value={formatMetric(recentlyUpdatedCount)}
               helper={`Updated in the last ${RECENT_ACTIVITY_WINDOW_DAYS} days`}
+              delayMs={160}
             />
           </section>
 
           <section className="space-y-5 lg:space-y-6">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-text-secondary/75">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
                   Results
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-text-primary">
+                <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-text-primary">
                   Resume library
                 </h2>
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-text-secondary">
@@ -383,15 +403,18 @@ export default function DashboardPageClient({
                   from the most recently updated project.
                 </p>
               </div>
-              <div className="rounded-full border border-bg-border/80 bg-bg-surface/80 px-4 py-2 text-xs font-medium tracking-[0.18em] text-text-secondary uppercase">
+              <div className="dashboard-chip px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary tabular-nums">
                 {resultSummary}
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-bg-border/80 bg-bg-surface/80 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.2)] backdrop-blur-sm sm:p-6">
+            <div
+              className="dashboard-panel dashboard-enter p-5 sm:p-6"
+              style={enterDelay(200)}
+            >
               <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-secondary/75">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
                     Controls Slot
                   </p>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
@@ -409,7 +432,10 @@ export default function DashboardPageClient({
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-bg-border/80 bg-bg-surface/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6 lg:p-7">
+            <div
+              className="dashboard-panel dashboard-enter p-4 sm:p-6 lg:p-7"
+              style={enterDelay(240)}
+            >
               {error ? (
                 <InlineErrorPanel
                   error={error}
@@ -422,12 +448,12 @@ export default function DashboardPageClient({
                 <EmptyState onCreate={handleNewResume} />
               ) : (
                 <div className="space-y-5">
-                  <div className="flex flex-col gap-2 border-b border-bg-border/70 pb-5 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="flex flex-col gap-2 border-b border-[color:var(--dashboard-border-subtle)] pb-5 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-secondary/75">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
                         Content
                       </p>
-                      <h3 className="mt-3 text-xl font-semibold text-text-primary">
+                      <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-text-primary">
                         All resume projects
                       </h3>
                     </div>
@@ -438,7 +464,7 @@ export default function DashboardPageClient({
                   </div>
 
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                    {resumes.map((resume) => (
+                    {resumes.map((resume, index) => (
                       <ResumeGroupCard
                         key={resume.id}
                         resume={resume}
@@ -450,6 +476,7 @@ export default function DashboardPageClient({
                         renamingId={renamingId}
                         onRename={handleRename}
                         onCancelRename={() => setRenamingId(null)}
+                        animationDelayMs={280 + index * 40}
                       />
                     ))}
                   </div>

@@ -3,7 +3,7 @@ title: "Design System: Ink & Amber"
 category: spec
 status: current
 relates_to: [frontend/app/globals.css]
-last_verified: 2026-03-20
+last_verified: 2026-03-29
 ---
 
 # Design System: "Ink & Amber"
@@ -66,4 +66,48 @@ Font CSS variables:
 
 ## Texture
 
-Subtle noise grain overlay on `--bg-deep` at 3-4% opacity (to be added as a `noise.png` background image).
+Subtle noise grain overlay on `--bg-deep` at low opacity. The dashboard now uses an inline noise layer with atmospheric haze so the texture is present without relying on a separate raster asset.
+
+## Dashboard Semantic Tokens
+
+Dashboard surfaces extend the base `Ink & Amber` palette instead of replacing it. Add dashboard-specific values in `frontend/app/globals.css` and consume them through semantic classes or CSS variables rather than hardcoded component values.
+
+| Token                        | Purpose |
+|-----------------------------|---------|
+| `--dashboard-bg-top`        | Top canvas tone for the dashboard shell |
+| `--dashboard-bg-bottom`     | Bottom canvas tone for the dashboard shell |
+| `--dashboard-haze-amber`    | Restrained warm atmospheric glow |
+| `--dashboard-haze-slate`    | Cool balancing haze for depth |
+| `--dashboard-panel`         | Default dashboard panel surface |
+| `--dashboard-panel-hover`   | Hover/focus state for interactive panels |
+| `--dashboard-panel-strong`  | Featured or emphasized dashboard surface |
+| `--dashboard-border-subtle` | Baseline panel and chip border |
+| `--dashboard-border-strong` | Hover/focus/active border emphasis |
+| `--dashboard-shadow-soft`   | Default card depth |
+| `--dashboard-shadow-ambient`| Stronger featured or hover depth |
+| `--dashboard-radius-panel`  | Shared panel radius |
+| `--dashboard-radius-chip`   | Shared chip radius |
+| `--dashboard-motion-fast`   | Quick motion timing (`160ms`) |
+| `--dashboard-motion-base`   | Base motion timing (`200ms`) |
+
+## Dashboard Surface Hierarchy
+
+- `base canvas`: shell gradient plus restrained amber/slate haze and low-opacity noise.
+- `normal panel`: `--dashboard-panel` with subtle border and soft shadow.
+- `featured panel`: `--dashboard-panel-strong` or hero treatment for the main workspace and CTA.
+
+Hover should tighten border and depth slightly. It should not create a floating-card gimmick or large positional movement.
+
+## Dashboard Motion And Focus
+
+- Keep dashboard transitions inside the `160ms` to `220ms` band.
+- Use subtle translate and shadow shifts only; avoid layout movement and decorative looping animations.
+- Button press states target roughly `scale(0.98)`.
+- All dashboard motion must respect `prefers-reduced-motion`.
+- Keyboard focus rings use the amber accent language and must stay visible against dark surfaces.
+
+## Dashboard Detail Rules
+
+- Use tabular numerals for dashboard counts, dates, and metrics.
+- Keep chip radius, panel borders, dropdown panels, and scrollbars aligned with dashboard tokens.
+- Avoid generic SaaS glassmorphism, bright purple accents, and multicolor mesh gradients.

@@ -14,12 +14,12 @@ export default function NewResumeButton({
   fullWidth = false,
 }: NewResumeButtonProps) {
   const baseClasses =
-    "flex items-center justify-center gap-2 rounded-xl text-sm transition-all cursor-pointer";
-  const sizeClasses = variant === "primary" ? "px-5 py-3 font-semibold" : "px-4 py-2 font-medium";
+    "dashboard-button cursor-pointer text-sm";
+  const sizeClasses = variant === "primary" ? "px-5 py-3.5 font-semibold" : "px-4 py-2.5 font-medium";
   const toneClasses =
     variant === "primary"
-      ? "bg-accent-amber text-bg-deep hover:brightness-110 active:scale-[0.99]"
-      : "border border-bg-border text-text-secondary hover:border-accent-amber hover:text-accent-amber";
+      ? "dashboard-button--primary"
+      : "dashboard-button--secondary";
 
   return (
     <button

@@ -14,6 +14,7 @@ interface ResumeGroupCardProps {
   renamingId?: string | null;
   onRename?: (id: string, newTitle: string) => void;
   onCancelRename?: () => void;
+  animationDelayMs?: number;
 }
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -40,12 +41,16 @@ export default function ResumeGroupCard({
   renamingId,
   onRename,
   onCancelRename,
+  animationDelayMs = 0,
 }: ResumeGroupCardProps) {
   const isRenaming = renamingId === resume.id;
   const hasTailoredVersions = resume.subResumes.length > 0;
 
   return (
-    <article className="group relative flex h-full flex-col overflow-hidden rounded-[30px] border border-bg-border/85 bg-[linear-gradient(180deg,rgba(34,34,44,0.96),rgba(21,21,29,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.24)] transition-all hover:-translate-y-0.5 hover:border-accent-amber/28 hover:shadow-[0_30px_85px_rgba(0,0,0,0.3)] sm:p-7">
+    <article
+      className="dashboard-panel dashboard-panel--interactive dashboard-enter group flex h-full flex-col p-6 sm:p-7"
+      style={animationDelayMs > 0 ? { animationDelay: `${animationDelayMs}ms` } : undefined}
+    >
       <div
         className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-accent-amber/55 to-transparent"
         aria-hidden="true"
@@ -53,12 +58,12 @@ export default function ResumeGroupCard({
 
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-accent-amber/18 bg-accent-amber/10 text-accent-amber shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="dashboard-icon-chip h-14 w-14 shrink-0 rounded-[20px]">
             <FileStack size={24} />
           </div>
 
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-accent-amber/90">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-accent-amber/90">
               Master Resume
             </p>
 
@@ -73,16 +78,21 @@ export default function ResumeGroupCard({
               </div>
             ) : (
               <h3
-                className="mt-3 truncate text-xl font-semibold tracking-tight text-text-primary sm:text-2xl cursor-text"
+                className="group/title mt-3 inline-flex cursor-text items-center gap-1 truncate text-xl font-semibold tracking-[-0.03em] text-text-primary sm:text-2xl"
                 onDoubleClick={() => onRequestRename(resume.id)}
                 title="Double-click to rename"
               >
-                {resume.title}
+                <span className="truncate">{resume.title}</span>
+                <PencilLine
+                  size={13}
+                  className="shrink-0 text-text-secondary opacity-0 transition-opacity group-hover/title:opacity-50"
+                />
               </h3>
             )}
 
             <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
-              Use this master draft as the source of truth, then attach role-specific tailored versions directly inside the project card.
+              Use this master draft as the source of truth, then attach role-specific
+              tailored versions directly inside the project card.
             </p>
           </div>
         </div>
@@ -93,13 +103,13 @@ export default function ResumeGroupCard({
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2.5">
-        <div className="rounded-full border border-bg-border/80 bg-bg-elevated/55 px-3 py-1.5 text-xs font-medium text-text-primary">
+        <div className="dashboard-chip dashboard-chip--accent px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]">
           Master Resume
         </div>
-        <div className="rounded-full border border-bg-border/80 bg-bg-elevated/55 px-3 py-1.5 text-xs font-medium tabular-nums text-text-secondary">
+        <div className="dashboard-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] tabular-nums">
           {formatTailoredCount(resume.subResumes.length)}
         </div>
-        <div className="rounded-full border border-bg-border/80 bg-bg-elevated/55 px-3 py-1.5 text-xs font-medium tabular-nums text-text-secondary">
+        <div className="dashboard-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] tabular-nums">
           Updated {formatDate(resume.updatedAt)}
         </div>
       </div>
@@ -108,7 +118,7 @@ export default function ResumeGroupCard({
         <button
           type="button"
           onClick={() => onOpen(resume.id)}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-accent-amber px-5 text-sm font-semibold text-bg-deep transition hover:brightness-110 cursor-pointer"
+          className="dashboard-button dashboard-button--primary h-11 cursor-pointer px-5 text-sm font-semibold"
           aria-label={`Open ${resume.title}`}
         >
           <ArrowUpRight size={15} />
@@ -117,7 +127,7 @@ export default function ResumeGroupCard({
         <button
           type="button"
           onClick={() => onRequestRename(resume.id)}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-bg-border/80 bg-bg-elevated/45 px-4 text-sm font-medium text-text-primary transition-colors hover:border-accent-amber/30 hover:text-accent-amber cursor-pointer"
+          className="dashboard-button dashboard-button--secondary h-11 cursor-pointer px-4 text-sm font-medium text-text-primary"
           aria-label={`Rename ${resume.title}`}
         >
           <PencilLine size={15} />
@@ -126,7 +136,7 @@ export default function ResumeGroupCard({
         <button
           type="button"
           onClick={() => onDuplicate(resume.id)}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-bg-border/80 bg-bg-elevated/45 px-4 text-sm font-medium text-text-primary transition-colors hover:border-accent-amber/30 hover:text-accent-amber cursor-pointer"
+          className="dashboard-button dashboard-button--secondary h-11 cursor-pointer px-4 text-sm font-medium text-text-primary"
           aria-label={`Duplicate ${resume.title}`}
         >
           <Copy size={15} />
@@ -134,17 +144,18 @@ export default function ResumeGroupCard({
         </button>
       </div>
 
-      <section className="mt-6 flex flex-1 flex-col rounded-[26px] border border-bg-border/80 bg-bg-deep/30 p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3 border-b border-bg-border/70 pb-4">
+      <section className="mt-6 flex flex-1 flex-col rounded-[26px] border border-[color:var(--dashboard-border-subtle)] bg-[var(--dashboard-panel-hover)] p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3 border-b border-[color:var(--dashboard-border-subtle)] pb-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-secondary/75">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-secondary/75">
               Tailored Versions
             </p>
             <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Attached role-specific variants live here so the master stays central and the tailored work stays obvious.
+              Attached role-specific variants live here so the master stays central
+              and the tailored work stays obvious.
             </p>
           </div>
-          <div className="rounded-full border border-bg-border/75 bg-bg-elevated/45 px-3 py-1.5 text-xs font-medium tabular-nums text-text-secondary">
+          <div className="dashboard-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] tabular-nums">
             {resume.subResumes.length} attached
           </div>
         </div>
@@ -166,9 +177,9 @@ export default function ResumeGroupCard({
             ))}
           </div>
         ) : (
-          <div className="mt-4 rounded-[24px] border border-dashed border-bg-border/80 bg-bg-elevated/30 p-5">
+          <div className="mt-4 rounded-[24px] border border-dashed border-[color:var(--dashboard-border-subtle)] bg-[rgba(20,21,28,0.48)] p-5">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-accent-amber/18 bg-accent-amber/10 text-accent-amber">
+              <div className="dashboard-icon-chip mt-0.5 h-10 w-10">
                 <Sparkles size={18} />
               </div>
               <div>
@@ -176,7 +187,8 @@ export default function ResumeGroupCard({
                   No tailored versions yet
                 </p>
                 <p className="mt-2 text-sm leading-7 text-text-secondary">
-                  Tailored versions let you customize this master resume for a specific role without losing the main source document.
+                  Tailored versions let you customize this master resume for a
+                  specific role without losing the main source document.
                 </p>
               </div>
             </div>
@@ -184,7 +196,7 @@ export default function ResumeGroupCard({
             <button
               type="button"
               onClick={() => onCreateSubResume(resume.id)}
-              className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-bg-border/80 bg-bg-surface/70 px-4 text-sm font-medium text-text-primary transition-colors hover:border-accent-amber/30 hover:text-accent-amber cursor-pointer"
+              className="dashboard-button dashboard-button--secondary mt-5 h-11 cursor-pointer px-4 text-sm font-medium text-text-primary"
             >
               <Plus size={15} />
               Create tailored version
@@ -197,7 +209,7 @@ export default function ResumeGroupCard({
         <button
           type="button"
           onClick={() => onCreateSubResume(resume.id)}
-          className="mt-4 inline-flex h-11 items-center justify-center gap-2 self-start rounded-2xl border border-bg-border/80 bg-bg-elevated/45 px-4 text-sm font-medium text-text-primary transition-colors hover:border-accent-amber/30 hover:text-accent-amber cursor-pointer"
+          className="dashboard-button dashboard-button--secondary mt-4 h-11 w-fit cursor-pointer px-4 text-sm font-medium text-text-primary"
         >
           <Plus size={15} />
           Create tailored version

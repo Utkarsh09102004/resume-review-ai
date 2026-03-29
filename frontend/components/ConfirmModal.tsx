@@ -56,7 +56,7 @@ export default function ConfirmModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-bg-deep/60 backdrop-blur-sm animate-[fadeIn_200ms_ease-out]"
+        className="fixed inset-0 bg-bg-deep/72 backdrop-blur-[2px] animate-[fadeIn_200ms_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -64,7 +64,7 @@ export default function ConfirmModal({
       {/* Modal */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <div
-          className="relative w-full max-w-md rounded-xl border border-bg-border bg-bg-surface p-6 shadow-2xl animate-[modalIn_200ms_ease-out]"
+          className="dashboard-panel dashboard-panel--strong relative w-full max-w-md p-6 animate-[modalIn_200ms_ease-out]"
           role="document"
         >
           <h2 className="text-lg font-semibold text-text-primary">
@@ -80,7 +80,7 @@ export default function ConfirmModal({
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="rounded-lg border border-bg-border bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-surface cursor-pointer"
+              className="dashboard-button dashboard-button--secondary cursor-pointer px-4 py-2 text-sm font-medium text-text-primary"
             >
               Cancel
             </button>
@@ -88,7 +88,7 @@ export default function ConfirmModal({
               type="button"
               onClick={onConfirm}
               disabled={isPending}
-              className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-status-error/80 cursor-pointer"
+              className="dashboard-button dashboard-button--danger cursor-pointer px-4 py-2 text-sm font-medium"
             >
               {isPending ? "Deleting..." : confirmLabel}
             </button>

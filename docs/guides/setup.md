@@ -132,17 +132,16 @@ To enable Logto auth:
 
 1. SSH tunnel to the VM:
    ```bash
-   ssh -L 3001:localhost:3001 -L 3002:localhost:3002 genserver_utkarsh
+   ssh -L 3301:localhost:3301 -L 3002:localhost:3002 genserver_utkarsh
    ```
-   > Note: This conflicts with the TeXLive port. Either stop TeXLive or remap the tunnel.
 
 2. Set environment variables:
    ```bash
    AUTH_ENABLED=true
-   LOGTO_ENDPOINT=http://localhost:3001
+   LOGTO_ENDPOINT=http://localhost:3301
    LOGTO_APP_ID=<your-app-id>
    LOGTO_APP_SECRET=<your-app-secret>
-   LOGTO_JWKS_URL=http://localhost:3001/oidc/jwks
+   LOGTO_JWKS_URL=http://localhost:3301/oidc/jwks
    ```
 
 3. Logto admin console: http://localhost:3002

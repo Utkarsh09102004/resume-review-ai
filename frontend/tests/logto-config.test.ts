@@ -18,12 +18,11 @@ describe('logto config', () => {
     delete process.env.LOGTO_APP_SECRET;
     delete process.env.NEXT_PUBLIC_BASE_URL;
     delete process.env.LOGTO_COOKIE_SECRET;
-    // Bypass readonly constraint for testing
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'development';
 
     const { logtoConfig } = await import('@/lib/logto');
-    expect(logtoConfig.endpoint).toBe('http://localhost:3001');
+    expect(logtoConfig.endpoint).toBe('http://localhost:3301');
     expect(logtoConfig.appId).toBe('');
     expect(logtoConfig.appSecret).toBe('');
     expect(logtoConfig.baseUrl).toBe('http://localhost:3000');
@@ -55,6 +54,8 @@ describe('logto config', () => {
   });
 
   it('sets cookieSecure=true only in production', async () => {
+    process.env.LOGTO_COOKIE_SECRET =
+      'a_real_32_char_secret_for_production!!';
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'production';
     const { logtoConfig: prodConfig } = await import('@/lib/logto');
@@ -65,5 +66,31 @@ describe('logto config', () => {
       'development';
     const { logtoConfig: devConfig } = await import('@/lib/logto');
     expect(devConfig.cookieSecure).toBe(false);
+  });
+
+  it('throws when LOGTO_COOKIE_SECRET is missing in production', async () => {
+    delete process.env.LOGTO_COOKIE_SECRET;
+    (process.env as Record<string, string | undefined>).NODE_ENV =
+      'production';
+
+    await expect(() => import('@/lib/logto')).rejects.toThrow(
+      'LOGTO_COOKIE_SECRET environment variable is required in production'
+    );
+  });
+
+  it('warns when using dev fallback cookie secret', async () => {
+    delete process.env.LOGTO_COOKIE_SECRET;
+    (process.env as Record<string, string | undefined>).NODE_ENV =
+      'development';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { logtoConfig } = await import('@/lib/logto');
+    expect(logtoConfig.cookieSecret).toBe(
+      'complex_password_at_least_32_characters_long_for_dev'
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('LOGTO_COOKIE_SECRET is not set')
+    );
+    warnSpy.mockRestore();
   });
 });

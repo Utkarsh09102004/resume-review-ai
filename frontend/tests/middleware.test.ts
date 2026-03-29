@@ -123,6 +123,19 @@ describe('middleware', () => {
       );
     });
 
+    it('does NOT treat empty logto cookies as a session', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      const { middleware } = await import('@/middleware');
+
+      const response = middleware(
+        makeRequest('/dashboard', { logto_myapp: '' })
+      );
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toContain(
+        '/api/logto/sign-in'
+      );
+    });
+
     it('does NOT treat non-logto cookies as a session', async () => {
       process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
       const { middleware } = await import('@/middleware');

@@ -8,5 +8,5 @@ export async function GET(request: NextRequest) {
   // the OIDC redirect URI. Passing only searchParams causes the SDK
   // to default to `${baseUrl}/callback` which mismatches the actual route.
   const url = new URL(request.url);
-  await handleSignIn(logtoConfig, url);
+  return await handleSignIn(logtoConfig, url);
 }

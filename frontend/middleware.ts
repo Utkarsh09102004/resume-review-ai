@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
   // via getLogtoContext().
   const hasLogtoSession = request.cookies
     .getAll()
-    .some((cookie) => cookie.name.startsWith('logto_'));
+    .some((cookie) => cookie.name.startsWith('logto_') && cookie.value.length > 0);
 
   if (!hasLogtoSession) {
     const signInUrl = new URL('/api/logto/sign-in', request.url);

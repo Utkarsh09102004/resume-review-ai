@@ -98,7 +98,7 @@ Production `.env` on the VM must include:
 ```bash
 DB_PASSWORD=<strong-password>
 AUTH_ENABLED=true
-LOGTO_JWKS_URL=http://localhost:3001/oidc/jwks
+LOGTO_JWKS_URL=http://localhost:3301/oidc/jwks
 LOGTO_APP_ID=<from-logto-admin>
 LOGTO_APP_SECRET=<from-logto-admin>
 ```
@@ -121,4 +121,4 @@ Not yet implemented. Currently manual deploys only.
 | Backend 503 on /api/compile | TeXLive container unhealthy | `docker compose restart texlive` |
 | Backend can't connect to DB | PostgreSQL container down | `docker compose restart postgres`, then re-run migrations |
 | Frontend shows blank page | Build failed | Check `docker compose logs frontend` |
-| Auth 401 errors | Logto down or JWT expired | Verify Logto is running: `curl http://localhost:3001/oidc/.well-known/openid-configuration` |
+| Auth 401 errors | Logto down or JWT expired | Verify Logto is running: `curl http://localhost:3301/oidc/.well-known/openid-configuration` |

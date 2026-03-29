@@ -38,6 +38,8 @@ vi.mock("@/app/(app)/dashboard/actions", () => ({
 describe("DashboardPageClient", () => {
   const origShowModal = HTMLDialogElement.prototype.showModal;
   const origClose = HTMLDialogElement.prototype.close;
+  const recentTimestamp = new Date().toISOString();
+  const staleTimestamp = "2025-01-01T00:00:00Z";
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -66,6 +68,7 @@ describe("DashboardPageClient", () => {
     );
 
     expect(screen.getByText("Failed to load resumes")).toBeInTheDocument();
+    expect(screen.getByText("My Resumes")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Try again"));
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
@@ -79,6 +82,7 @@ describe("DashboardPageClient", () => {
       />
     );
     expect(screen.getByText("No resumes yet")).toBeInTheDocument();
+    expect(screen.getByText("Base Resumes")).toBeInTheDocument();
   });
 
   it("exposes a sign-out link in the authenticated toolbar", () => {
@@ -96,6 +100,47 @@ describe("DashboardPageClient", () => {
     );
   });
 
+  it("moves the primary new resume action into the hero", () => {
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[]}
+        initialError={null}
+      />
+    );
+
+    expect(screen.getAllByRole("button", { name: "New Resume" })).toHaveLength(1);
+  });
+
+  it("renders the KPI strip and controls slot", () => {
+    render(
+      <DashboardPageClient
+        user={{ name: "User" }}
+        resumes={[
+          {
+            id: "r1",
+            title: "My Resume",
+            updatedAt: recentTimestamp,
+            subResumes: [
+              {
+                id: "r2",
+                title: "PM Resume",
+                updatedAt: staleTimestamp,
+              },
+            ],
+          },
+        ]}
+        initialError={null}
+      />
+    );
+
+    expect(screen.getByText("Base Resumes")).toBeInTheDocument();
+    expect(screen.getByText("Tailored Versions")).toBeInTheDocument();
+    expect(screen.getByText("Recently Updated")).toBeInTheDocument();
+    expect(screen.getByText("Controls Slot")).toBeInTheDocument();
+    expect(screen.getByText("Resume library")).toBeInTheDocument();
+  });
+
   it("renders resume cards when resumes exist", () => {
     render(
       <DashboardPageClient
@@ -104,7 +149,7 @@ describe("DashboardPageClient", () => {
           {
             id: "r1",
             title: "My Resume",
-            updatedAt: "2025-01-01T00:00:00Z",
+            updatedAt: staleTimestamp,
             subResumes: [],
           },
         ]}

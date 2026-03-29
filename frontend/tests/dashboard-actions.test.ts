@@ -81,9 +81,13 @@ describe("dashboard server actions", () => {
     expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("duplicates a resume by reading the original and creating a copy", async () => {
+  it("duplicates a top-level resume by reading the original and creating a copy", async () => {
     mockGet.mockResolvedValue({
-      data: { title: "Original Resume", latex_source: "\\\\source" },
+      data: {
+        title: "Original Resume",
+        latex_source: "\\\\source",
+        parent_id: null,
+      },
     });
     mockPost.mockResolvedValue({ data: { id: "copy-123" } });
 
@@ -94,6 +98,28 @@ describe("dashboard server actions", () => {
     expect(mockPost).toHaveBeenCalledWith("/api/resumes/", {
       title: "Original Resume (copy)",
       latex_source: "\\\\source",
+    });
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("duplicates a sub-resume into the same parent group", async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        title: "Tailored Resume",
+        latex_source: "\\\\tailored",
+        parent_id: "parent-1",
+      },
+    });
+    mockPost.mockResolvedValue({ data: { id: "copy-sub-123" } });
+
+    const result = await duplicateResumeAction("sub-1");
+
+    expect(result).toEqual({ ok: true, resumeId: "copy-sub-123" });
+    expect(mockGet).toHaveBeenCalledWith("/api/resumes/sub-1");
+    expect(mockPost).toHaveBeenCalledWith("/api/resumes/", {
+      title: "Tailored Resume (copy)",
+      latex_source: "\\\\tailored",
+      parent_id: "parent-1",
     });
     expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard");
   });

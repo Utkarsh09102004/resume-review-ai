@@ -119,10 +119,14 @@ export async function duplicateResumeAction(
     await requireUserDisplayInfo();
     const client = await createAuthenticatedApi();
     const original = await client.get<ResumeFromAPI>(`/api/resumes/${id}`);
-    const response = await client.post<ResumeFromAPI>("/api/resumes/", {
+    const payload = {
       title: `${original.data.title} (copy)`,
       latex_source: original.data.latex_source,
-    });
+      ...(original.data.parent_id !== null
+        ? { parent_id: original.data.parent_id }
+        : {}),
+    };
+    const response = await client.post<ResumeFromAPI>("/api/resumes/", payload);
     await revalidateDashboard();
     return { ok: true, resumeId: response.data.id };
   } catch (error) {

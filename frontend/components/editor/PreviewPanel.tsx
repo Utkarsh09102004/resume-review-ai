@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 
 interface PreviewPanelProps {
   pdfData: Uint8Array | null;
@@ -15,17 +15,35 @@ export default function PreviewPanel({
 }: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
 
+  const destroyPdfResources = useCallback(() => {
+    const loadingTask = loadingTaskRef.current;
+    loadingTaskRef.current = null;
+    if (loadingTask) {
+      void loadingTask.destroy();
+    }
+
+    const activePdfDoc = pdfDocRef.current;
+    pdfDocRef.current = null;
+    if (activePdfDoc) {
+      void activePdfDoc.destroy();
+    }
+  }, []);
+
   // Load the PDF document when pdfData changes
   useEffect(() => {
+    destroyPdfResources();
+    setPdfDoc(null);
+    setNumPages(0);
+    setCurrentPage(1);
+
     if (!pdfData) {
-      setPdfDoc(null);
-      setNumPages(0);
-      setCurrentPage(1);
       return;
     }
 
@@ -37,21 +55,33 @@ export default function PreviewPanel({
 
       if (!pdfData) return;
       const loadingTask = pdfjsLib.getDocument({ data: pdfData.slice() });
-      const pdf = await loadingTask.promise;
+      loadingTaskRef.current = loadingTask;
+      try {
+        const pdf = await loadingTask.promise;
 
-      if (cancelled) return;
+        if (cancelled || loadingTaskRef.current !== loadingTask) {
+          void pdf.destroy();
+          return;
+        }
 
-      setPdfDoc(pdf);
-      setNumPages(pdf.numPages);
-      setCurrentPage(1);
+        pdfDocRef.current = pdf;
+        setPdfDoc(pdf);
+        setNumPages(pdf.numPages);
+        setCurrentPage(1);
+      } catch {
+        if (!cancelled && loadingTaskRef.current === loadingTask) {
+          loadingTaskRef.current = null;
+        }
+      }
     }
 
     loadPdf();
 
     return () => {
       cancelled = true;
+      destroyPdfResources();
     };
-  }, [pdfData]);
+  }, [destroyPdfResources, pdfData]);
 
   // Render the current page whenever the document or page changes
   useEffect(() => {

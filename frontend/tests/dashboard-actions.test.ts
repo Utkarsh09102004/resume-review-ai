@@ -126,4 +126,24 @@ describe("dashboard server actions", () => {
     expect(mockCreateAuthenticatedApi).not.toHaveBeenCalled();
     expect(mockRevalidatePath).not.toHaveBeenCalled();
   });
+
+  it("returns API detail messages when a mutation fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockPut.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        data: {
+          detail: "Resume title already exists",
+        },
+      },
+    });
+
+    await expect(renameResumeAction("resume-1", "Duplicate Resume")).resolves.toEqual({
+      ok: false,
+      error: "Resume title already exists",
+    });
+    expect(mockRevalidatePath).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
 });

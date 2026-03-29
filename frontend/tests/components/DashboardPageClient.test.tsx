@@ -35,7 +35,7 @@ vi.mock("@/app/(app)/dashboard/actions", () => ({
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("DashboardPage", () => {
+describe("DashboardPageClient", () => {
   const origShowModal = HTMLDialogElement.prototype.showModal;
   const origClose = HTMLDialogElement.prototype.close;
 

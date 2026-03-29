@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import React from "react";
 
@@ -55,7 +55,7 @@ vi.mock("@/app/(app)/editor/[id]/editor-data", () => ({
   getEditorPageData: (id: string) => mockGetEditorPageData(id),
 }));
 
-describe("authenticated app shell", () => {
+describe("authenticated app routes", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -132,6 +132,24 @@ describe("authenticated app shell", () => {
       ],
       initialError: null,
     });
+  });
+
+  it("falls back to an empty dashboard state when the server loader fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockDashboardGet.mockRejectedValueOnce(new Error("dashboard failed"));
+
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+
+    render(await DashboardPage());
+
+    expect(mockDashboardClient).toHaveBeenCalledWith({
+      user: { name: "Alice" },
+      resumes: [],
+      initialError: "Failed to load resumes",
+    });
+    expect(consoleError).toHaveBeenCalled();
+
+    consoleError.mockRestore();
   });
 
   it("passes server-loaded editor data into the editor workspace island", async () => {

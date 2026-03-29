@@ -1,7 +1,9 @@
 "use server";
 
 import axios from "axios";
+import { revalidatePath } from "next/cache";
 import { createAuthenticatedApi } from "@/lib/api";
+import { requireUserDisplayInfo } from "@/lib/auth";
 import type { ResumeFromAPI } from "@/lib/resumes";
 
 interface ResumeUpdateInput {
@@ -13,6 +15,7 @@ async function updateResume(
   resumeId: string,
   updates: ResumeUpdateInput
 ): Promise<ResumeFromAPI> {
+  await requireUserDisplayInfo();
   const api = await createAuthenticatedApi();
 
   try {
@@ -20,6 +23,8 @@ async function updateResume(
       `/api/resumes/${resumeId}`,
       updates
     );
+    revalidatePath("/dashboard");
+    revalidatePath(`/editor/${resumeId}`);
     return response.data;
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {

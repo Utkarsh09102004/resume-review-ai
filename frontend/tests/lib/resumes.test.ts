@@ -47,7 +47,6 @@ describe("groupResumes", () => {
         id: "main-newer",
         title: "Newer Resume",
         updatedAt: "2025-01-02T00:00:00Z",
-        latexSource: "newer-source",
         subResumes: [
           {
             id: "sub-newer",
@@ -65,7 +64,6 @@ describe("groupResumes", () => {
         id: "main-older",
         title: "Older Resume",
         updatedAt: "2025-01-01T00:00:00Z",
-        latexSource: "older-source",
         subResumes: [],
       },
     ]);

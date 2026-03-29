@@ -4,7 +4,7 @@ import React from "react";
 
 const mockRequireUserDisplayInfo = vi.fn(async () => ({ name: "Alice" }));
 const mockDashboardGet = vi.fn();
-const mockCreateAuthenticatedApi = vi.fn(async () => ({ get: mockDashboardGet }));
+const mockCreateAuthenticatedApiRSC = vi.fn(async () => ({ get: mockDashboardGet }));
 const mockDashboardClient = vi.fn<(props: unknown) => void>();
 const mockEditorWorkspace = vi.fn<(props: unknown) => void>();
 const mockGetEditorPageData = vi.fn<
@@ -30,7 +30,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  createAuthenticatedApi: () => mockCreateAuthenticatedApi(),
+  createAuthenticatedApiRSC: () => mockCreateAuthenticatedApiRSC(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -120,7 +120,6 @@ describe("authenticated app routes", () => {
           id: "resume-1",
           title: "Main Resume",
           updatedAt: "2025-01-01T00:00:00Z",
-          latexSource: "\\documentclass{article}",
           subResumes: [
             {
               id: "resume-2",

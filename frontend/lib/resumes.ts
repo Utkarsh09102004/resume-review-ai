@@ -18,7 +18,6 @@ export interface ResumeGroup {
   id: string;
   title: string;
   updatedAt: string;
-  latexSource: string;
   subResumes: SubResumeSummary[];
 }
 
@@ -48,7 +47,6 @@ export function groupResumes(flat: ResumeFromAPI[]): ResumeGroup[] {
     id: resume.id,
     title: resume.title,
     updatedAt: resume.updated_at,
-    latexSource: resume.latex_source,
     subResumes: subResumesByParent.get(resume.id) ?? [],
   }));
 }

@@ -90,7 +90,6 @@ describe("DashboardPageClient", () => {
             id: "r1",
             title: "My Resume",
             updatedAt: "2025-01-01T00:00:00Z",
-            latexSource: "\\documentclass{article}",
             subResumes: [],
           },
         ]}

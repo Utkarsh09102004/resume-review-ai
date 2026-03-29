@@ -39,6 +39,43 @@ export async function getAuthContext() {
 }
 
 /**
+ * Display-friendly user info for the UI (name + optional avatar).
+ */
+export interface UserDisplayInfo {
+  name: string;
+  avatarUrl?: string;
+}
+
+/**
+ * Get display info for the current user.
+ *
+ * In dev mode returns a generic "User" name. When auth is enabled,
+ * extracts name/picture from the Logto ID-token claims.
+ *
+ * Call this from Server Components or Server Actions only.
+ */
+export async function getUserDisplayInfo(): Promise<UserDisplayInfo | null> {
+  if (!isAuthEnabled()) {
+    return { name: 'User' };
+  }
+
+  const ctx = await getLogtoContext(logtoConfig);
+  if (!ctx.isAuthenticated || !ctx.claims) {
+    return null;
+  }
+
+  // The `profile` scope (requested by default) puts `name` and `picture`
+  // in the ID token, but the SDK type only declares JWT-standard fields.
+  const claims = ctx.claims as Record<string, unknown>;
+  const name =
+    typeof claims.name === 'string' && claims.name ? claims.name : 'User';
+  const avatarUrl =
+    typeof claims.picture === 'string' ? claims.picture : undefined;
+
+  return { name, avatarUrl };
+}
+
+/**
  * Get a Bearer access token for the current user.
  *
  * In dev mode returns undefined — the backend defaults to a dev user

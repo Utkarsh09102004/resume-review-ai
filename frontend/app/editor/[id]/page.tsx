@@ -10,6 +10,7 @@ import PreviewPanel from "@/components/editor/PreviewPanel";
 import ErrorPanel from "@/components/editor/ErrorPanel";
 import { useResumeEditor } from "@/hooks/useResumeEditor";
 import { useCompiler } from "@/hooks/useCompiler";
+import { useUser } from "@/components/UserProvider";
 import api from "@/lib/api";
 
 export default function EditorPage({
@@ -19,6 +20,7 @@ export default function EditorPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const user = useUser();
   const { resume, parentResume, loading, notFound, error, isSaving, save } =
     useResumeEditor(id);
 
@@ -99,7 +101,7 @@ export default function EditorPage({
   if (loading) {
     return (
       <div className="flex h-screen flex-col">
-        <Toolbar user={{ name: "Utkarsh Agarwal" }} />
+        <Toolbar user={user ?? undefined} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-bg-border border-t-accent-amber" />
@@ -113,7 +115,7 @@ export default function EditorPage({
   if (notFound) {
     return (
       <div className="flex h-screen flex-col">
-        <Toolbar user={{ name: "Utkarsh Agarwal" }} />
+        <Toolbar user={user ?? undefined} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-center">
             <p className="text-lg font-semibold text-text-primary">
@@ -138,7 +140,7 @@ export default function EditorPage({
   if (error) {
     return (
       <div className="flex h-screen flex-col">
-        <Toolbar user={{ name: "Utkarsh Agarwal" }} />
+        <Toolbar user={user ?? undefined} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-center">
             <p className="text-sm text-status-error">{error}</p>
@@ -159,7 +161,7 @@ export default function EditorPage({
     <div className="flex h-screen flex-col">
       <Toolbar
         breadcrumb={breadcrumb}
-        user={{ name: "Utkarsh Agarwal" }}
+        user={user ?? undefined}
         actions={
           <div className="flex items-center gap-2">
             {saveError && (

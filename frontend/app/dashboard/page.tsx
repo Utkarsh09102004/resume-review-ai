@@ -8,9 +8,11 @@ import EmptyState from "@/components/dashboard/EmptyState";
 import NewResumeButton from "@/components/dashboard/NewResumeButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import { useResumes } from "@/hooks/useResumes";
+import { useUser } from "@/components/UserProvider";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const user = useUser();
   const {
     resumes,
     loading,
@@ -125,7 +127,7 @@ export default function DashboardPage() {
   return (
     <div className="flex h-screen flex-col">
       <Toolbar
-        user={{ name: "Utkarsh Agarwal" }}
+        user={user ?? undefined}
         actions={<NewResumeButton onClick={handleNewResume} />}
       />
 

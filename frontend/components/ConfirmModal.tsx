@@ -54,7 +54,7 @@ export default function ConfirmModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-[fadeIn_200ms_ease-out]"
+        className="fixed inset-0 bg-bg-deep/60 backdrop-blur-sm animate-[fadeIn_200ms_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -84,7 +84,7 @@ export default function ConfirmModal({
             <button
               type="button"
               onClick={onConfirm}
-              className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-status-error/80 cursor-pointer"
+              className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-status-error/80 cursor-pointer"
             >
               {confirmLabel}
             </button>

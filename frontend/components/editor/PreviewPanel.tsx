@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 
 interface PreviewPanelProps {
   pdfData: Uint8Array | null;
@@ -11,17 +13,25 @@ interface PreviewPanelProps {
 function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pdfRef = useRef<PDFDocumentProxy | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [numPages, setNumPages] = useState(0);
+
+  // Load the PDF document when pdfData changes
   useEffect(() => {
-    if (!pdfData || !canvasRef.current) return;
+    if (!pdfData) {
+      pdfRef.current = null;
+      setNumPages(0);
+      setCurrentPage(1);
+      return;
+    }
 
     let cancelled = false;
     let renderTask: { cancel(): void; promise: Promise<void> } | null = null;
 
-    async function renderPdf() {
+    async function loadPdf() {
       const pdfjsLib = await import("pdfjs-dist");
-
-      // Use local worker from public/ (CDN doesn't have v5.x builds)
       pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
       if (!pdfData) return;
@@ -30,7 +40,29 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
 
       if (cancelled) return;
 
-      const page = await pdf.getPage(1);
+      pdfRef.current = pdf;
+      setNumPages(pdf.numPages);
+      setCurrentPage(1);
+    }
+
+    loadPdf();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfData]);
+
+  // Render the current page whenever it changes
+  useEffect(() => {
+    if (!pdfRef.current || !canvasRef.current || numPages === 0) return;
+
+    let cancelled = false;
+
+    async function renderPage() {
+      const pdf = pdfRef.current;
+      if (!pdf) return;
+
+      const page = await pdf.getPage(currentPage);
       const canvas = canvasRef.current;
       if (!canvas || cancelled) return;
 
@@ -53,34 +85,70 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
       }
     }
 
-    renderPdf();
+    renderPage();
 
     return () => {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdfData]);
+  }, [currentPage, numPages]);
+
+  const goToPrev = useCallback(() => {
+    setCurrentPage((p) => Math.max(1, p - 1));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setCurrentPage((p) => Math.min(numPages, p + 1));
+  }, [numPages]);
 
   return (
     <div
       ref={containerRef}
-      className={`flex h-full w-full items-start justify-center overflow-auto bg-bg-deep p-6 ${className}`}
+      className={`flex h-full w-full flex-col bg-bg-deep ${className}`}
     >
-      {pdfData ? (
-        <canvas
-          ref={canvasRef}
-          className="rounded shadow-xl shadow-black/40"
-          style={{ backgroundColor: "#f5f5f5" }}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="h-16 w-12 rounded border-2 border-dashed border-bg-border" />
-            <p className="text-sm text-text-secondary">PDF Preview</p>
-            <p className="text-xs text-text-secondary/60">
-              Compile your LaTeX to see the output here
-            </p>
+      <div className="flex flex-1 items-start justify-center overflow-auto p-6">
+        {pdfData ? (
+          <canvas
+            ref={canvasRef}
+            className="rounded shadow-xl shadow-black/40"
+            style={{ backgroundColor: "#f5f5f5" }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="h-16 w-12 rounded border-2 border-dashed border-bg-border" />
+              <p className="text-sm text-text-secondary">PDF Preview</p>
+              <p className="text-xs text-text-secondary/60">
+                Compile your LaTeX to see the output here
+              </p>
+            </div>
           </div>
+        )}
+      </div>
+
+      {numPages > 1 && (
+        <div className="flex shrink-0 items-center justify-center gap-3 border-t border-bg-border bg-bg-elevated px-4 py-2">
+          <button
+            type="button"
+            onClick={goToPrev}
+            disabled={currentPage <= 1}
+            className="rounded p-1 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-30 cursor-pointer"
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-xs tabular-nums text-text-secondary">
+            Page {currentPage} of {numPages}
+          </span>
+          <button
+            type="button"
+            onClick={goToNext}
+            disabled={currentPage >= numPages}
+            className="rounded p-1 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-30 cursor-pointer"
+            aria-label="Next page"
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       )}
     </div>

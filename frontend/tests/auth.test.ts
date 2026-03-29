@@ -1,14 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-// Keep a reference to the mock so we can override per-test
+// Keep references to mocks so we can override per-test
 const mockGetAccessToken = vi.fn(async () => 'mock-token');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockGetLogtoContext = vi.fn<any>(async () => ({
+  isAuthenticated: true as boolean,
+  claims: { sub: 'real-user' } as Record<string, unknown>,
+}));
 
 // Mock @logto/next/server-actions so it doesn't try to import next/navigation
 vi.mock('@logto/next/server-actions', () => ({
-  getLogtoContext: vi.fn(async () => ({
-    isAuthenticated: true,
-    claims: { sub: 'real-user' },
-  })),
+  getLogtoContext: (...args: unknown[]) => (mockGetLogtoContext as (...a: unknown[]) => unknown)(...args),
   getAccessToken: () => mockGetAccessToken(),
   signIn: vi.fn(),
   signOut: vi.fn(),
@@ -124,6 +126,50 @@ describe('auth utilities', () => {
       const { getAuthAccessToken } = await import('@/lib/auth');
       const token = await getAuthAccessToken();
       expect(token).toBeUndefined();
+    });
+  });
+
+  describe('getUserDisplayInfo — dev mode (auth disabled)', () => {
+    it('returns a generic "User" name', async () => {
+      delete process.env.NEXT_PUBLIC_AUTH_ENABLED;
+      const { getUserDisplayInfo } = await import('@/lib/auth');
+      const info = await getUserDisplayInfo();
+      expect(info).toEqual({ name: 'User' });
+    });
+  });
+
+  describe('getUserDisplayInfo — auth enabled', () => {
+    it('returns name and avatar from claims', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetLogtoContext.mockResolvedValueOnce({
+        isAuthenticated: true,
+        claims: { sub: 'u1', name: 'Alice', picture: 'https://img/a.png' },
+      });
+      const { getUserDisplayInfo } = await import('@/lib/auth');
+      const info = await getUserDisplayInfo();
+      expect(info).toEqual({ name: 'Alice', avatarUrl: 'https://img/a.png' });
+    });
+
+    it('falls back to "User" when name claim is missing', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetLogtoContext.mockResolvedValueOnce({
+        isAuthenticated: true,
+        claims: { sub: 'u2' },
+      });
+      const { getUserDisplayInfo } = await import('@/lib/auth');
+      const info = await getUserDisplayInfo();
+      expect(info).toEqual({ name: 'User', avatarUrl: undefined });
+    });
+
+    it('returns null when not authenticated', async () => {
+      process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';
+      mockGetLogtoContext.mockResolvedValueOnce({
+        isAuthenticated: false,
+        claims: undefined,
+      });
+      const { getUserDisplayInfo } = await import('@/lib/auth');
+      const info = await getUserDisplayInfo();
+      expect(info).toBeNull();
     });
   });
 });

@@ -21,7 +21,8 @@ describe('logto config', () => {
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'development';
 
-    const { logtoConfig } = await import('@/lib/logto');
+    const { getLogtoConfig } = await import('@/lib/logto');
+    const logtoConfig = getLogtoConfig();
     expect(logtoConfig.endpoint).toBe('http://localhost:3301');
     expect(logtoConfig.appId).toBe('');
     expect(logtoConfig.appSecret).toBe('');
@@ -42,7 +43,8 @@ describe('logto config', () => {
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'production';
 
-    const { logtoConfig } = await import('@/lib/logto');
+    const { getLogtoConfig } = await import('@/lib/logto');
+    const logtoConfig = getLogtoConfig();
     expect(logtoConfig.endpoint).toBe('https://auth.example.com');
     expect(logtoConfig.appId).toBe('my-app-id');
     expect(logtoConfig.appSecret).toBe('my-secret');
@@ -58,22 +60,34 @@ describe('logto config', () => {
       'a_real_32_char_secret_for_production!!';
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'production';
-    const { logtoConfig: prodConfig } = await import('@/lib/logto');
+    const { getLogtoConfig } = await import('@/lib/logto');
+    const prodConfig = getLogtoConfig();
     expect(prodConfig.cookieSecure).toBe(true);
 
     vi.resetModules();
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'development';
-    const { logtoConfig: devConfig } = await import('@/lib/logto');
+    const { getLogtoConfig: getDevLogtoConfig } = await import('@/lib/logto');
+    const devConfig = getDevLogtoConfig();
     expect(devConfig.cookieSecure).toBe(false);
   });
 
-  it('throws when LOGTO_COOKIE_SECRET is missing in production', async () => {
+  it('does not throw on import when LOGTO_COOKIE_SECRET is missing in production', async () => {
     delete process.env.LOGTO_COOKIE_SECRET;
     (process.env as Record<string, string | undefined>).NODE_ENV =
       'production';
 
-    await expect(() => import('@/lib/logto')).rejects.toThrow(
+    await expect(import('@/lib/logto')).resolves.toBeDefined();
+  });
+
+  it('throws when LOGTO_COOKIE_SECRET is resolved at runtime in production without a value', async () => {
+    delete process.env.LOGTO_COOKIE_SECRET;
+    (process.env as Record<string, string | undefined>).NODE_ENV =
+      'production';
+
+    const { getLogtoConfig } = await import('@/lib/logto');
+
+    expect(() => getLogtoConfig()).toThrow(
       'LOGTO_COOKIE_SECRET environment variable is required in production'
     );
   });
@@ -84,7 +98,8 @@ describe('logto config', () => {
       'development';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const { logtoConfig } = await import('@/lib/logto');
+    const { getLogtoConfig } = await import('@/lib/logto');
+    const logtoConfig = getLogtoConfig();
     expect(logtoConfig.cookieSecret).toBe(
       'complex_password_at_least_32_characters_long_for_dev'
     );

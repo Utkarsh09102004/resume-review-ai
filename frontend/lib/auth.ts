@@ -5,7 +5,7 @@ import {
 } from '@logto/next/server-actions';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
-import { logtoConfig } from './logto';
+import { getLogtoConfig } from './logto';
 
 /**
  * Whether auth is enabled. When false (default for dev), all auth checks
@@ -30,7 +30,7 @@ const getCachedAuthContext = cache(async () => {
     };
   }
 
-  return getLogtoContext(logtoConfig);
+  return getLogtoContext(getLogtoConfig());
 });
 
 /**
@@ -106,7 +106,7 @@ export async function getAuthAccessToken(): Promise<string | undefined> {
   }
 
   try {
-    return await getAccessToken(logtoConfig);
+    return await getAccessToken(getLogtoConfig());
   } catch {
     return undefined;
   }
@@ -124,7 +124,7 @@ export async function getAuthAccessTokenRSC(): Promise<string | undefined> {
   }
 
   try {
-    return await getAccessTokenRSC(logtoConfig);
+    return await getAccessTokenRSC(getLogtoConfig());
   } catch {
     return undefined;
   }

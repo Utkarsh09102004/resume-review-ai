@@ -4,6 +4,7 @@ node_modules/
 # Build output (rebuilt in container)
 .next/
 out/
+*.tsbuildinfo
 
 # Environment files (contain secrets)
 .env

@@ -93,7 +93,7 @@ All checks must pass before committing. Run from the repo root:
 
 ```bash
 make setup       # clean-clone bootstrap: uv sync + npm ci
-make check       # run everything: ruff + eslint + mypy + tsc
+make check       # run everything: ruff + eslint + mypy + tsc + next build
 make lint        # linting only (ruff + eslint)
 make typecheck   # type checking only (mypy + tsc)
 make fmt         # auto-format backend (ruff format + fix)

@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Middleware to protect authenticated routes (/dashboard, /editor/*).
+ * Proxy to protect authenticated routes (/dashboard, /editor/*).
  *
  * When NEXT_PUBLIC_AUTH_ENABLED is not "true" (default for dev), all
  * requests pass through without auth checks so the app works without
@@ -10,8 +10,8 @@ import { NextResponse, type NextRequest } from 'next/server';
  * When auth IS enabled, we check for the Logto session cookie.
  * If missing, redirect to the sign-in flow.
  */
-export function middleware(request: NextRequest) {
-  const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
+export function proxy(request: NextRequest) {
+  const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
   if (!authEnabled) {
     return NextResponse.next();
@@ -23,10 +23,10 @@ export function middleware(request: NextRequest) {
   // via getLogtoContext().
   const hasLogtoSession = request.cookies
     .getAll()
-    .some((cookie) => cookie.name.startsWith('logto_') && cookie.value.length > 0);
+    .some((cookie) => cookie.name.startsWith("logto_") && cookie.value.length > 0);
 
   if (!hasLogtoSession) {
-    const signInUrl = new URL('/api/logto/sign-in', request.url);
+    const signInUrl = new URL("/api/logto/sign-in", request.url);
     return NextResponse.redirect(signInUrl);
   }
 
@@ -34,5 +34,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/editor/:path*'],
+  matcher: ["/dashboard/:path*", "/editor/:path*"],
 };

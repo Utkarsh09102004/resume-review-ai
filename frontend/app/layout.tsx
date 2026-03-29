@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   description: "AI-powered LaTeX resume editor",
 };
 
+// The app shell depends on per-request auth state and live backend data,
+// so production verification should build it as a dynamic app instead of
+// attempting static prerendering during `next build`.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -1,6 +1,6 @@
 # ── ResumeForge — setup, lint & type-check ─────────────────────────
 
-.PHONY: setup install-backend install-frontend lint lint-backend lint-frontend typecheck typecheck-backend typecheck-frontend fmt check test test-backend test-frontend test-cov
+.PHONY: setup install-backend install-frontend lint lint-backend lint-frontend typecheck typecheck-backend typecheck-frontend build build-frontend fmt check test test-backend test-frontend test-cov
 
 # ── Individual targets ──────────────────────────────────────────────
 
@@ -22,6 +22,9 @@ typecheck-backend:
 typecheck-frontend:
 	cd frontend && npm run typecheck
 
+build-frontend:
+	cd frontend && npm run build
+
 fmt:
 	cd backend && uv run ruff format . && uv run ruff check --fix .
 
@@ -33,7 +36,9 @@ lint: lint-backend lint-frontend
 
 typecheck: typecheck-backend typecheck-frontend
 
-check: lint typecheck
+build: build-frontend
+
+check: lint typecheck build
 
 # ── Test targets ──────────────────────────────────────────────────
 

@@ -31,7 +31,7 @@ npm run dev
 
 Visit http://localhost:3000.
 
-Run `make check` from the repo root after setup to verify the backend and frontend lint/typecheck baseline.
+Run `make check` from the repo root after setup to verify backend checks plus the frontend production build.
 
 ## Documentation
 

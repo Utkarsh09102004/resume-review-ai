@@ -10,10 +10,56 @@ interface PreviewPanelProps {
   className?: string;
 }
 
+const pdfPreviewKeys = new WeakMap<Uint8Array, number>();
+let nextPdfPreviewKey = 0;
+
+function getPdfPreviewKey(pdfData: Uint8Array): number {
+  const existingKey = pdfPreviewKeys.get(pdfData);
+  if (existingKey !== undefined) {
+    return existingKey;
+  }
+
+  const previewKey = ++nextPdfPreviewKey;
+  pdfPreviewKeys.set(pdfData, previewKey);
+  return previewKey;
+}
+
 export default function PreviewPanel({
   pdfData,
   className = "",
 }: PreviewPanelProps) {
+  if (!pdfData) {
+    return (
+      <div className={`flex h-full w-full flex-col bg-bg-deep ${className}`}>
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="h-16 w-12 rounded border-2 border-dashed border-bg-border" />
+            <p className="text-sm text-text-secondary">PDF Preview</p>
+            <p className="text-xs text-text-secondary/60">
+              Compile your LaTeX to see the output here
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <LoadedPreviewPanel
+      key={getPdfPreviewKey(pdfData)}
+      className={className}
+      pdfData={pdfData}
+    />
+  );
+}
+
+function LoadedPreviewPanel({
+  pdfData,
+  className,
+}: {
+  pdfData: Uint8Array;
+  className: string;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
@@ -41,13 +87,6 @@ export default function PreviewPanel({
   // Load the PDF document when pdfData changes
   useEffect(() => {
     destroyPdfResources();
-    setPdfDoc(null);
-    setNumPages(0);
-    setCurrentPage(1);
-
-    if (!pdfData) {
-      return;
-    }
 
     let cancelled = false;
     const loadGeneration = ++loadGenerationRef.current;
@@ -158,23 +197,11 @@ export default function PreviewPanel({
       className={`flex h-full w-full flex-col bg-bg-deep ${className}`}
     >
       <div className="flex flex-1 items-start justify-center overflow-auto p-6">
-        {pdfData ? (
-          <canvas
-            ref={canvasRef}
-            className="rounded shadow-xl shadow-black/40"
-            style={{ backgroundColor: "#f5f5f5" }}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <div className="h-16 w-12 rounded border-2 border-dashed border-bg-border" />
-              <p className="text-sm text-text-secondary">PDF Preview</p>
-              <p className="text-xs text-text-secondary/60">
-                Compile your LaTeX to see the output here
-              </p>
-            </div>
-          </div>
-        )}
+        <canvas
+          ref={canvasRef}
+          className="rounded shadow-xl shadow-black/40"
+          style={{ backgroundColor: "#f5f5f5" }}
+        />
       </div>
 
       {numPages > 1 && (

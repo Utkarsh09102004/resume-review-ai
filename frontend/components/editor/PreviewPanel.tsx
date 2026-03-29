@@ -28,7 +28,6 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
     }
 
     let cancelled = false;
-    let renderTask: { cancel(): void; promise: Promise<void> } | null = null;
 
     async function loadPdf() {
       const pdfjsLib = await import("pdfjs-dist");
@@ -57,6 +56,7 @@ function PreviewPanelInner({ pdfData, className = "" }: PreviewPanelProps) {
     if (!pdfRef.current || !canvasRef.current || numPages === 0) return;
 
     let cancelled = false;
+    let renderTask: { cancel(): void; promise: Promise<void> } | null = null;
 
     async function renderPage() {
       const pdf = pdfRef.current;

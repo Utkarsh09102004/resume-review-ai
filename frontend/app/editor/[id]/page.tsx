@@ -54,7 +54,7 @@ export default function EditorPage({
     }
   }, [resume, latex, save]);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = async () => {
     if (!currentLatex.trim()) return;
 
     try {
@@ -75,7 +75,7 @@ export default function EditorPage({
     } catch (err) {
       console.error("Download compile failed:", err);
     }
-  }, [currentLatex, resume?.title]);
+  };
 
   // Build breadcrumb
   const breadcrumb: { label: string; href?: string }[] = [

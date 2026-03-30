@@ -2,9 +2,17 @@ import uuid
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.resume_ops import (
+    ResumeNotFoundError,
+)
+from app.core.resume_ops import (
+    get_resume as get_owned_resume,
+)
+from app.core.resume_ops import (
+    list_resumes as list_user_resumes,
+)
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.resume import Resume
@@ -18,8 +26,7 @@ async def list_resumes(
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> Sequence[Resume]:
-    result = await session.execute(select(Resume).where(Resume.user_id == user_id).order_by(Resume.updated_at.desc()))
-    return result.scalars().all()
+    return await list_user_resumes(session, user_id)
 
 
 @router.post("/", response_model=ResumeResponse, status_code=status.HTTP_201_CREATED)
@@ -62,13 +69,13 @@ async def get_resume(
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> Resume:
-    resume = await session.get(Resume, resume_id)
-    if resume is None or resume.user_id != user_id:
+    try:
+        return await get_owned_resume(session, user_id, resume_id)
+    except ResumeNotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resume not found",
-        )
-    return resume
+            detail=err.detail,
+        ) from err
 
 
 @router.put("/{resume_id}", response_model=ResumeResponse)
@@ -78,12 +85,13 @@ async def update_resume(
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> Resume:
-    resume = await session.get(Resume, resume_id)
-    if resume is None or resume.user_id != user_id:
+    try:
+        resume = await get_owned_resume(session, user_id, resume_id)
+    except ResumeNotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resume not found",
-        )
+            detail=err.detail,
+        ) from err
 
     update_data = body.model_dump(exclude_unset=True)
     for field, value in update_data.items():

@@ -3,6 +3,7 @@
 import {
   useDeferredValue,
   useEffect,
+  useRef,
   useState,
   useTransition,
   type CSSProperties,
@@ -297,6 +298,7 @@ export default function DashboardPageClient({
   const pathname = usePathname() ?? "/dashboard";
   const searchParams = useSearchParams();
   const searchParamsString = searchParams?.toString() ?? "";
+  const syncedSearchParamsRef = useRef(searchParamsString);
   const parsedControls = parseDashboardControls(searchParams ?? new URLSearchParams());
   const [isRouting, startRoutingTransition] = useTransition();
   const [deleteModal, setDeleteModal] = useState<{
@@ -358,10 +360,8 @@ export default function DashboardPageClient({
         : "Search base resume titles and tailored versions from one workspace.";
 
   useEffect(() => {
-    setQuery((current) => (current === parsedControls.query ? current : parsedControls.query));
-    setFilter((current) => (current === parsedControls.filter ? current : parsedControls.filter));
-    setSort((current) => (current === parsedControls.sort ? current : parsedControls.sort));
-  }, [parsedControls.filter, parsedControls.query, parsedControls.sort]);
+    syncedSearchParamsRef.current = searchParamsString;
+  }, [searchParamsString]);
 
   useEffect(() => {
     const nextSearchParams = buildDashboardControlsSearchParams(
@@ -370,10 +370,11 @@ export default function DashboardPageClient({
     );
     const nextSearchParamsString = nextSearchParams.toString();
 
-    if (nextSearchParamsString === searchParamsString) {
+    if (nextSearchParamsString === syncedSearchParamsRef.current) {
       return;
     }
 
+    syncedSearchParamsRef.current = nextSearchParamsString;
     startRoutingTransition(() => {
       router.replace(
         nextSearchParamsString ? `${pathname}?${nextSearchParamsString}` : pathname,

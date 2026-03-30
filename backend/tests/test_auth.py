@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jose import jwt
 
+from app.core import auth as core_auth
 from app.middleware import auth
 from app.middleware.auth import get_current_user
 
@@ -77,11 +78,11 @@ def _make_token(
 
 @pytest.fixture(autouse=True)
 async def _reset_jwks_cache() -> AsyncGenerator[None, None]:
-    auth._jwks_cache = None  # type: ignore[attr-defined]
-    auth._jwks_cache_time = 0  # type: ignore[attr-defined]
+    core_auth._jwks_cache = None
+    core_auth._jwks_cache_time = 0
     yield
-    auth._jwks_cache = None  # type: ignore[attr-defined]
-    auth._jwks_cache_time = 0  # type: ignore[attr-defined]
+    core_auth._jwks_cache = None
+    core_auth._jwks_cache_time = 0
 
 
 # ---------------------------------------------------------------------------

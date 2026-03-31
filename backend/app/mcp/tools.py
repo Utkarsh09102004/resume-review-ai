@@ -1,6 +1,7 @@
 import json
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from fastmcp import Context, FastMCP
@@ -11,6 +12,20 @@ from app.core.compile import CompileError, CompileServiceUnavailable, compile_la
 from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes, update_resume_latex
 from app.mcp import get_session
 from app.models.resume import Resume
+
+
+@dataclass(frozen=True)
+class _MatchSpan:
+    start: int
+    end: int
+    whitespace_adjusted: bool = False
+
+
+@dataclass(frozen=True)
+class _NormalizedText:
+    text: str
+    starts: list[int]
+    ends: list[int]
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -54,19 +69,22 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
             original_latex = resume.latex_source
-            match_count = original_latex.count(search)
-            if match_count == 0:
-                raise ToolError("Text not found. Verify the exact text exists in the resume.")
-            if match_count > 1:
-                raise ToolError(
-                    f"Found {match_count} matches. Provide more surrounding context for a unique match."
-                )
-
-            match_start = original_latex.find(search)
-            updated_latex = original_latex.replace(search, replace, 1)
+            match = _find_unique_match(
+                original_latex,
+                search,
+                not_found_message="Text not found. Verify the exact text exists in the resume.",
+            )
+            updated_latex = original_latex[: match.start] + replace + original_latex[match.end :]
             await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
 
-        return _format_search_replace_result(original_latex, updated_latex, match_start, search, replace)
+        return _format_search_replace_result(
+            original_latex,
+            updated_latex,
+            match.start,
+            match.end,
+            replace,
+            whitespace_adjusted=match.whitespace_adjusted,
+        )
 
     @mcp.tool
     async def insert_content(
@@ -87,16 +105,23 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
             original_latex = resume.latex_source
-            match_start = _find_unique_match_start(
+            match = _find_unique_match(
                 original_latex,
                 after,
                 not_found_message="Anchor not found. Verify the exact anchor text exists in the resume.",
             )
-            insert_at = match_start + len(after)
+            insert_at = match.end
             updated_latex = original_latex[:insert_at] + "\n" + content + original_latex[insert_at:]
             await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
 
-        return _format_insert_content_result(original_latex, updated_latex, match_start, after, content)
+        return _format_insert_content_result(
+            original_latex,
+            updated_latex,
+            match.start,
+            match.end,
+            content,
+            whitespace_adjusted=match.whitespace_adjusted,
+        )
 
     @mcp.tool
     async def delete_content(
@@ -115,15 +140,21 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
             original_latex = resume.latex_source
-            match_start = _find_unique_match_start(
+            match = _find_unique_match(
                 original_latex,
                 text,
                 not_found_message="Text not found. Verify the exact text exists in the resume.",
             )
-            updated_latex = original_latex.replace(text, "", 1)
+            updated_latex = original_latex[: match.start] + original_latex[match.end :]
             await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
 
-        return _format_delete_content_result(original_latex, updated_latex, match_start, text)
+        return _format_delete_content_result(
+            original_latex,
+            updated_latex,
+            match.start,
+            match.end,
+            whitespace_adjusted=match.whitespace_adjusted,
+        )
 
     @mcp.tool
     async def compile_resume(resume_id: str, ctx: Context = CurrentContext()) -> str:
@@ -169,13 +200,75 @@ def _validate_non_empty_text(value: str, field_name: str) -> None:
         raise ToolError(f"Invalid {field_name}: must be a non-empty string")
 
 
-def _find_unique_match_start(text: str, needle: str, *, not_found_message: str) -> int:
+def _find_unique_match(text: str, needle: str, *, not_found_message: str) -> _MatchSpan:
     match_count = text.count(needle)
     if match_count == 0:
-        raise ToolError(not_found_message)
+        normalized_text = _normalize_whitespace(text)
+        normalized_needle = _normalize_whitespace(needle)
+
+        if not normalized_needle.text:
+            raise ToolError(not_found_message)
+
+        normalized_match_count = normalized_text.text.count(normalized_needle.text)
+        if normalized_match_count == 0:
+            raise ToolError(not_found_message)
+        if normalized_match_count > 1:
+            raise ToolError(
+                f"Found {normalized_match_count} matches. Provide more surrounding context for a unique match."
+            )
+
+        normalized_start = normalized_text.text.find(normalized_needle.text)
+        normalized_end = normalized_start + len(normalized_needle.text)
+        return _MatchSpan(
+            start=normalized_text.starts[normalized_start],
+            end=normalized_text.ends[normalized_end - 1],
+            whitespace_adjusted=True,
+        )
     if match_count > 1:
         raise ToolError(f"Found {match_count} matches. Provide more surrounding context for a unique match.")
-    return text.find(needle)
+    match_start = text.find(needle)
+    return _MatchSpan(start=match_start, end=match_start + len(needle))
+
+
+def _normalize_whitespace(text: str) -> _NormalizedText:
+    normalized_chars: list[str] = []
+    starts: list[int] = []
+    ends: list[int] = []
+    line_start = 0
+
+    for line in text.splitlines(keepends=True):
+        line_ending_length = 0
+        if line.endswith("\r\n"):
+            line_ending_length = 2
+        elif line.endswith("\n") or line.endswith("\r"):
+            line_ending_length = 1
+
+        line_body = line[:-line_ending_length] if line_ending_length else line
+        trimmed_length = len(line_body)
+        while trimmed_length > 0 and line_body[trimmed_length - 1].isspace():
+            trimmed_length -= 1
+
+        for offset in range(trimmed_length):
+            normalized_chars.append(line_body[offset])
+            starts.append(line_start + offset)
+            ends.append(line_start + offset + 1)
+
+        trimmed_start = line_start + trimmed_length
+        line_end = line_start + len(line)
+
+        if line_ending_length:
+            if len(normalized_chars) >= 2 and normalized_chars[-1] == "\n" and normalized_chars[-2] == "\n":
+                ends[-1] = line_end
+            else:
+                normalized_chars.append("\n")
+                starts.append(trimmed_start)
+                ends.append(line_end)
+        elif trimmed_start < line_end and ends:
+            ends[-1] = line_end
+
+        line_start = line_end
+
+    return _NormalizedText("".join(normalized_chars), starts, ends)
 
 
 def _format_resume_list(resumes: Sequence[Resume]) -> str:
@@ -202,13 +295,15 @@ def _format_search_replace_result(
     original_latex: str,
     updated_latex: str,
     match_start: int,
-    search: str,
+    match_end: int,
     replace: str,
+    *,
+    whitespace_adjusted: bool = False,
 ) -> str:
     before_range, before_snippet = _format_context_with_line_numbers(
         original_latex,
         match_start,
-        match_start + len(search),
+        match_end,
     )
     after_range, after_snippet = _format_context_with_line_numbers(
         updated_latex,
@@ -217,7 +312,7 @@ def _format_search_replace_result(
     )
 
     return (
-        "Replaced 1 match.\n"
+        f"{_format_match_result_prefix('Replaced 1 match', whitespace_adjusted)}\n"
         f"Before ({before_range}):\n{before_snippet}\n"
         f"After ({after_range}):\n{after_snippet}"
     )
@@ -227,15 +322,17 @@ def _format_insert_content_result(
     original_latex: str,
     updated_latex: str,
     match_start: int,
-    after: str,
+    match_end: int,
     content: str,
+    *,
+    whitespace_adjusted: bool = False,
 ) -> str:
     anchor_range, anchor_snippet = _format_context_with_line_numbers(
         original_latex,
         match_start,
-        match_start + len(after),
+        match_end,
     )
-    insert_start = match_start + len(after) + 1
+    insert_start = match_end + 1
     inserted_range, inserted_snippet = _format_context_with_line_numbers(
         updated_latex,
         insert_start,
@@ -243,7 +340,7 @@ def _format_insert_content_result(
     )
 
     return (
-        "Inserted content after 1 match.\n"
+        f"{_format_match_result_prefix('Inserted content after 1 match', whitespace_adjusted)}\n"
         f"Anchor ({anchor_range}):\n{anchor_snippet}\n"
         f"After insertion ({inserted_range}):\n{inserted_snippet}"
     )
@@ -253,12 +350,14 @@ def _format_delete_content_result(
     original_latex: str,
     updated_latex: str,
     match_start: int,
-    deleted_text: str,
+    match_end: int,
+    *,
+    whitespace_adjusted: bool = False,
 ) -> str:
     deleted_range, deleted_snippet = _format_context_with_line_numbers(
         original_latex,
         match_start,
-        match_start + len(deleted_text),
+        match_end,
     )
     after_range, after_snippet = _format_context_with_line_numbers(
         updated_latex,
@@ -267,10 +366,15 @@ def _format_delete_content_result(
     )
 
     return (
-        "Deleted 1 match.\n"
+        f"{_format_match_result_prefix('Deleted 1 match', whitespace_adjusted)}\n"
         f"Removed ({deleted_range}):\n{deleted_snippet}\n"
         f"After deletion ({after_range}):\n{after_snippet}"
     )
+
+
+def _format_match_result_prefix(action: str, whitespace_adjusted: bool) -> str:
+    suffix = " (whitespace-adjusted)" if whitespace_adjusted else ""
+    return f"{action}{suffix}."
 
 
 def _format_compile_error_result(detail: Any) -> str:

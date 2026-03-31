@@ -377,6 +377,66 @@ async def test_search_replace_updates_owned_resume_and_returns_context(
 
 
 @pytest.mark.asyncio
+async def test_search_replace_falls_back_for_trailing_whitespace_mismatch(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "\\documentclass{article}\n\\begin{document}\nOld role title   \n\\end{document}"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        search="Old role title\n",
+        replace="Senior role title\n",
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result == (
+        "Replaced 1 match (whitespace-adjusted).\n"
+        "Before (line 3):\n"
+        "2\t\\begin{document}\n"
+        "3\tOld role title   \n"
+        "4\t\\end{document}\n"
+        "After (line 3):\n"
+        "2\t\\begin{document}\n"
+        "3\tSenior role title\n"
+        "4\t\\end{document}"
+    )
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == (
+        "\\documentclass{article}\n\\begin{document}\nSenior role title\n\\end{document}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_search_replace_rejects_invalid_uuid() -> None:
     mcp = FastMCP("test")
     register_tools(mcp)
@@ -449,6 +509,54 @@ async def test_search_replace_rejects_missing_text(
 
 
 @pytest.mark.asyncio
+async def test_search_replace_falls_back_for_mixed_whitespace_mismatch(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "Start\r\n\r\n\r\nTabbed line\t \r\nEnd"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        search="Start\n\nTabbed line\nEnd",
+        replace="Start\n\nNormalized line\nEnd",
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result.startswith("Replaced 1 match (whitespace-adjusted).\n")
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == "Start\n\nNormalized line\nEnd"
+
+
+@pytest.mark.asyncio
 async def test_search_replace_rejects_ambiguous_match(
     test_engine,
     monkeypatch: pytest.MonkeyPatch,
@@ -486,6 +594,49 @@ async def test_search_replace_rejects_ambiguous_match(
         await tool.fn(
             resume_id=str(resume_id),
             search="duplicate",
+            replace="unique",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_rejects_ambiguous_normalized_match(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source="duplicate   \n\n\nvalue\nduplicate\t\n\nvalue",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(
+        ToolError,
+        match=r"Found 2 matches\. Provide more surrounding context for a unique match\.",
+    ):
+        await tool.fn(
+            resume_id=str(resume_id),
+            search="duplicate\n\nvalue",
             replace="unique",
             ctx=_FakeToolContext("test-user"),
         )
@@ -603,6 +754,71 @@ async def test_insert_content_updates_owned_resume_and_returns_context(
 
 
 @pytest.mark.asyncio
+async def test_insert_content_falls_back_for_blank_line_mismatch(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = (
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "\\section*{Experience}\n"
+        "\n"
+        "\n"
+        "Existing entry\n"
+        "\\end{document}"
+    )
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("insert_content")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        after="\\section*{Experience}\n\nExisting entry",
+        content="\\item New project",
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result.startswith("Inserted content after 1 match (whitespace-adjusted).\n")
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == (
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "\\section*{Experience}\n"
+        "\n"
+        "\n"
+        "Existing entry\n"
+        "\\item New project\n"
+        "\\end{document}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_insert_content_rejects_invalid_inputs() -> None:
     mcp = FastMCP("test")
     register_tools(mcp)
@@ -664,6 +880,49 @@ async def test_insert_content_rejects_missing_anchor(
         await tool.fn(
             resume_id=str(resume_id),
             after="\\section*{Projects}",
+            content="\\item New project",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_insert_content_does_not_ignore_leading_indentation(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source="\\begin{itemize}\n  \\item Existing project\n\\end{itemize}",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("insert_content")
+    assert tool is not None
+
+    with pytest.raises(
+        ToolError,
+        match=r"Anchor not found\. Verify the exact anchor text exists in the resume\.",
+    ):
+        await tool.fn(
+            resume_id=str(resume_id),
+            after="\\begin{itemize}\n\\item Existing project",
             content="\\item New project",
             ctx=_FakeToolContext("test-user"),
         )
@@ -818,6 +1077,53 @@ async def test_delete_content_updates_owned_resume_and_returns_context(
         "Remaining role\n"
         "\\end{document}"
     )
+
+
+@pytest.mark.asyncio
+async def test_delete_content_falls_back_for_crlf_mismatch(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "Header\r\nDelete me\r\nKeep me\r\n"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("delete_content")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        text="Delete me\n",
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result.startswith("Deleted 1 match (whitespace-adjusted).\n")
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == "Header\r\nKeep me\r\n"
 
 
 @pytest.mark.asyncio

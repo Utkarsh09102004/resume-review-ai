@@ -2,8 +2,6 @@
 
 import {
   useDeferredValue,
-  useEffect,
-  useRef,
   useState,
   useTransition,
   type CSSProperties,
@@ -36,6 +34,7 @@ import {
   getVisibleResumeGroups,
   hasActiveDashboardControls,
   parseDashboardControls,
+  type DashboardControlsState,
   type DashboardFilterValue,
   type DashboardSortValue,
 } from "@/lib/dashboardControls";
@@ -298,7 +297,6 @@ export default function DashboardPageClient({
   const pathname = usePathname() ?? "/dashboard";
   const searchParams = useSearchParams();
   const searchParamsString = searchParams?.toString() ?? "";
-  const syncedSearchParamsRef = useRef(searchParamsString);
   const parsedControls = parseDashboardControls(searchParams ?? new URLSearchParams());
   const [isRouting, startRoutingTransition] = useTransition();
   const [deleteModal, setDeleteModal] = useState<{
@@ -306,9 +304,26 @@ export default function DashboardPageClient({
     id: string;
     title: string;
   }>({ open: false, id: "", title: "" });
+
+  // Local state drives immediate UI; URL is updated via replaceControls() in
+  // event handlers (no sync effect needed — per rerender-move-effect-to-event).
+  // External URL changes (back/forward) are detected and synced via render-time
+  // state adjustment (per rerender-derived-state-no-effect).
   const [query, setQuery] = useState(parsedControls.query);
   const [filter, setFilter] = useState<DashboardFilterValue>(parsedControls.filter);
   const [sort, setSort] = useState<DashboardSortValue>(parsedControls.sort);
+  const [prevSearchParamsString, setPrevSearchParamsString] = useState(searchParamsString);
+  if (searchParamsString !== prevSearchParamsString && !isRouting) {
+    // Sync local state from URL only for external changes (back/forward).
+    // While a self-originated transition is in flight (isRouting), skip sync
+    // and keep prevSearchParamsString stale so the final settled URL re-triggers
+    // this check once the transition completes.
+    setPrevSearchParamsString(searchParamsString);
+    if (query !== parsedControls.query) setQuery(parsedControls.query);
+    if (filter !== parsedControls.filter) setFilter(parsedControls.filter);
+    if (sort !== parsedControls.sort) setSort(parsedControls.sort);
+  }
+
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [nameModal, setNameModal] = useState<{
     open: boolean;
@@ -359,29 +374,21 @@ export default function DashboardPageClient({
         ? "Updating the shareable dashboard URL."
         : "Search base resume titles and tailored versions from one workspace.";
 
-  useEffect(() => {
-    syncedSearchParamsRef.current = searchParamsString;
-  }, [searchParamsString]);
-
-  useEffect(() => {
+  function replaceControls(next: Partial<DashboardControlsState>) {
+    const merged = { query, filter, sort, ...next };
     const nextSearchParams = buildDashboardControlsSearchParams(
-      { query, filter, sort },
+      merged,
       searchParamsString
     );
     const nextSearchParamsString = nextSearchParams.toString();
-
-    if (nextSearchParamsString === syncedSearchParamsRef.current) {
-      return;
-    }
-
-    syncedSearchParamsRef.current = nextSearchParamsString;
+    if (nextSearchParamsString === searchParamsString) return;
     startRoutingTransition(() => {
       router.replace(
         nextSearchParamsString ? `${pathname}?${nextSearchParamsString}` : pathname,
         { scroll: false }
       );
     });
-  }, [filter, pathname, query, router, searchParamsString, sort]);
+  }
 
   function handleOpen(id: string) {
     router.push(`/editor/${id}`);
@@ -422,6 +429,7 @@ export default function DashboardPageClient({
     setQuery(DEFAULT_DASHBOARD_CONTROLS.query);
     setFilter(DEFAULT_DASHBOARD_CONTROLS.filter);
     setSort(DEFAULT_DASHBOARD_CONTROLS.sort);
+    replaceControls(DEFAULT_DASHBOARD_CONTROLS);
   }
 
   function handleRetry() {
@@ -611,7 +619,11 @@ export default function DashboardPageClient({
                         id="dashboard-search"
                         type="search"
                         value={query}
-                        onChange={(event) => setQuery(event.target.value)}
+                        onChange={(event) => {
+                          const nextQuery = event.target.value;
+                          setQuery(nextQuery);
+                          replaceControls({ query: nextQuery });
+                        }}
                         placeholder="Search resumes and tailored versions"
                         disabled={controlsDisabled}
                         className="h-12 w-full rounded-2xl border border-[color:var(--dashboard-border-subtle)] bg-[rgba(29,30,39,0.58)] pl-11 pr-11 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/70 focus:border-accent-amber/35 disabled:cursor-not-allowed disabled:opacity-60"
@@ -619,7 +631,10 @@ export default function DashboardPageClient({
                       {query ? (
                         <button
                           type="button"
-                          onClick={() => setQuery("")}
+                          onClick={() => {
+                            setQuery("");
+                            replaceControls({ query: "" });
+                          }}
                           className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-[rgba(255,255,255,0.04)] hover:text-text-primary"
                           aria-label="Clear search"
                         >
@@ -644,7 +659,10 @@ export default function DashboardPageClient({
                           label={option.label}
                           active={filter === option.value}
                           disabled={controlsDisabled}
-                          onClick={() => setFilter(option.value)}
+                          onClick={() => {
+                            setFilter(option.value);
+                            replaceControls({ filter: option.value });
+                          }}
                         />
                       ))}
                     </div>
@@ -665,9 +683,11 @@ export default function DashboardPageClient({
                       <select
                         id="dashboard-sort"
                         value={sort}
-                        onChange={(event) =>
-                          setSort(event.target.value as DashboardSortValue)
-                        }
+                        onChange={(event) => {
+                          const nextSort = event.target.value as DashboardSortValue;
+                          setSort(nextSort);
+                          replaceControls({ sort: nextSort });
+                        }}
                         disabled={controlsDisabled}
                         className="h-12 w-full appearance-none rounded-2xl border border-[color:var(--dashboard-border-subtle)] bg-[rgba(29,30,39,0.58)] pl-11 pr-4 text-sm text-text-primary outline-none transition-colors focus:border-accent-amber/35 disabled:cursor-not-allowed disabled:opacity-60"
                       >

@@ -66,6 +66,63 @@ def register_tools(mcp: FastMCP) -> None:
 
         return _format_search_replace_result(original_latex, updated_latex, match_start, search, replace)
 
+    @mcp.tool
+    async def insert_content(
+        resume_id: str,
+        after: str,
+        content: str,
+        ctx: Context = CurrentContext(),
+    ) -> str:
+        user_id = await _require_user_id(ctx)
+        parsed_resume_id = _parse_uuid(resume_id)
+        _validate_non_empty_text(after, "after")
+        _validate_non_empty_text(content, "content")
+
+        async with get_session() as session:
+            try:
+                resume = await get_resume(session, user_id, parsed_resume_id)
+            except ResumeNotFoundError as err:
+                raise ToolError(err.detail) from err
+
+            original_latex = resume.latex_source
+            match_start = _find_unique_match_start(
+                original_latex,
+                after,
+                not_found_message="Anchor not found. Verify the exact anchor text exists in the resume.",
+            )
+            insert_at = match_start + len(after)
+            updated_latex = original_latex[:insert_at] + "\n" + content + original_latex[insert_at:]
+            await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
+
+        return _format_insert_content_result(original_latex, updated_latex, match_start, after, content)
+
+    @mcp.tool
+    async def delete_content(
+        resume_id: str,
+        text: str,
+        ctx: Context = CurrentContext(),
+    ) -> str:
+        user_id = await _require_user_id(ctx)
+        parsed_resume_id = _parse_uuid(resume_id)
+        _validate_non_empty_text(text, "text")
+
+        async with get_session() as session:
+            try:
+                resume = await get_resume(session, user_id, parsed_resume_id)
+            except ResumeNotFoundError as err:
+                raise ToolError(err.detail) from err
+
+            original_latex = resume.latex_source
+            match_start = _find_unique_match_start(
+                original_latex,
+                text,
+                not_found_message="Text not found. Verify the exact text exists in the resume.",
+            )
+            updated_latex = original_latex.replace(text, "", 1)
+            await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
+
+        return _format_delete_content_result(original_latex, updated_latex, match_start, text)
+
 
 async def _require_user_id(ctx: Context) -> str:
     user_id = await ctx.get_state("user_id")
@@ -82,8 +139,21 @@ def _parse_uuid(value: str) -> uuid.UUID:
 
 
 def _validate_search_text(search: str) -> None:
-    if not search:
-        raise ToolError("Invalid search: must be a non-empty string")
+    _validate_non_empty_text(search, "search")
+
+
+def _validate_non_empty_text(value: str, field_name: str) -> None:
+    if not value:
+        raise ToolError(f"Invalid {field_name}: must be a non-empty string")
+
+
+def _find_unique_match_start(text: str, needle: str, *, not_found_message: str) -> int:
+    match_count = text.count(needle)
+    if match_count == 0:
+        raise ToolError(not_found_message)
+    if match_count > 1:
+        raise ToolError(f"Found {match_count} matches. Provide more surrounding context for a unique match.")
+    return text.find(needle)
 
 
 def _format_resume_list(resumes: Sequence[Resume]) -> str:
@@ -128,6 +198,56 @@ def _format_search_replace_result(
         "Replaced 1 match.\n"
         f"Before ({before_range}):\n{before_snippet}\n"
         f"After ({after_range}):\n{after_snippet}"
+    )
+
+
+def _format_insert_content_result(
+    original_latex: str,
+    updated_latex: str,
+    match_start: int,
+    after: str,
+    content: str,
+) -> str:
+    anchor_range, anchor_snippet = _format_context_with_line_numbers(
+        original_latex,
+        match_start,
+        match_start + len(after),
+    )
+    insert_start = match_start + len(after) + 1
+    inserted_range, inserted_snippet = _format_context_with_line_numbers(
+        updated_latex,
+        insert_start,
+        insert_start + len(content),
+    )
+
+    return (
+        "Inserted content after 1 match.\n"
+        f"Anchor ({anchor_range}):\n{anchor_snippet}\n"
+        f"After insertion ({inserted_range}):\n{inserted_snippet}"
+    )
+
+
+def _format_delete_content_result(
+    original_latex: str,
+    updated_latex: str,
+    match_start: int,
+    deleted_text: str,
+) -> str:
+    deleted_range, deleted_snippet = _format_context_with_line_numbers(
+        original_latex,
+        match_start,
+        match_start + len(deleted_text),
+    )
+    after_range, after_snippet = _format_context_with_line_numbers(
+        updated_latex,
+        match_start,
+        match_start,
+    )
+
+    return (
+        "Deleted 1 match.\n"
+        f"Removed ({deleted_range}):\n{deleted_snippet}\n"
+        f"After deletion ({after_range}):\n{after_snippet}"
     )
 
 

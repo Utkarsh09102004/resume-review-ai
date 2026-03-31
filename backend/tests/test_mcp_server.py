@@ -196,6 +196,17 @@ async def test_list_user_resumes_returns_only_owned_resumes_formatted(
 
 
 @pytest.mark.asyncio
+async def test_list_user_resumes_requires_user_id() -> None:
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("list_user_resumes")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Authentication context missing user_id"):
+        await tool.fn(ctx=_FakeToolContext(None))
+
+
+@pytest.mark.asyncio
 async def test_read_resume_returns_latex_with_line_numbers(
     test_engine,
     monkeypatch: pytest.MonkeyPatch,

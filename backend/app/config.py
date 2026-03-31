@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://resumeforge:devpassword@localhost:5434/resumeforge"
     TEXLIVE_URL: str = "http://localhost:3001"
+    MCP_HOST: str = "0.0.0.0"
+    MCP_PORT: int = 8001
     AUTH_ENABLED: bool = True
     LOGTO_JWKS_URL: str = ""
     LOGTO_APP_ID: str = ""

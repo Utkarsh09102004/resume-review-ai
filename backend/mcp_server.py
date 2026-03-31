@@ -6,6 +6,7 @@ from starlette.middleware import Middleware as ASGIMiddleware
 
 from app.config import settings
 from app.mcp import BearerAuthHTTPMiddleware, LogtoAuthMiddleware, dispose_engine
+from app.mcp.tools import register_tools
 
 
 @asynccontextmanager
@@ -15,12 +16,14 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
 
 
 def create_mcp_server() -> FastMCP:
-    return FastMCP(
+    mcp = FastMCP(
         name="ResumeForge MCP",
         instructions="AI-powered LaTeX resume editing tools for authenticated ResumeForge users.",
         middleware=[LogtoAuthMiddleware()],
         lifespan=lifespan,
     )
+    register_tools(mcp)
+    return mcp
 
 
 server = create_mcp_server()

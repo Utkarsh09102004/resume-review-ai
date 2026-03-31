@@ -1,9 +1,15 @@
+import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import MiddlewareContext
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
 from starlette.middleware import Middleware as ASGIMiddleware
 from starlette.responses import JSONResponse
@@ -11,6 +17,9 @@ from starlette.routing import Route
 
 from app.core.auth import AuthError
 from app.mcp.auth_middleware import BearerAuthHTTPMiddleware, LogtoAuthMiddleware
+from app.mcp.tools import register_tools
+from app.models.resume import Resume
+from mcp_server import create_mcp_server
 
 
 class _FakeFastMCPContext:
@@ -20,6 +29,15 @@ class _FakeFastMCPContext:
     async def set_state(self, key: str, value: Any, *, serializable: bool = True) -> None:
         assert serializable is True
         self.state[key] = value
+
+
+class _FakeToolContext:
+    def __init__(self, user_id: str | None) -> None:
+        self.user_id = user_id
+
+    async def get_state(self, key: str) -> str | None:
+        assert key == "user_id"
+        return self.user_id
 
 
 async def _ok_endpoint(_request) -> JSONResponse:
@@ -102,3 +120,180 @@ async def test_fastmcp_middleware_sets_user_id_state(
     assert result == {"ok": True}
     assert fastmcp_context.state == {"user_id": "user-123"}
     call_next.assert_awaited_once_with(context)
+
+
+@pytest.mark.asyncio
+async def test_create_mcp_server_registers_read_only_resume_tools() -> None:
+    server = create_mcp_server()
+
+    tools = await server.list_tools(run_middleware=False)
+    tool_names = {tool.name for tool in tools}
+
+    assert "list_user_resumes" in tool_names
+    assert "read_resume" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_list_user_resumes_returns_only_owned_resumes_formatted(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    newer_resume_id = uuid.uuid4()
+    older_resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                Resume(
+                    id=older_resume_id,
+                    user_id="test-user",
+                    title="Data Science Resume",
+                    latex_source="older",
+                    updated_at=datetime(2026, 3, 25, tzinfo=UTC),
+                ),
+                Resume(
+                    id=newer_resume_id,
+                    user_id="test-user",
+                    title="Software Engineer Resume",
+                    latex_source="newer",
+                    updated_at=datetime(2026, 3, 28, tzinfo=UTC),
+                ),
+                Resume(
+                    user_id="other-user",
+                    title="Hidden Resume",
+                    latex_source="hidden",
+                    updated_at=datetime(2026, 3, 30, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("list_user_resumes")
+    assert tool is not None
+
+    result = await tool.fn(ctx=_FakeToolContext("test-user"))
+
+    assert result == (
+        f'- {newer_resume_id} | "Software Engineer Resume" | updated 2026-03-28\n'
+        f'- {older_resume_id} | "Data Science Resume" | updated 2026-03-25'
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_resume_returns_latex_with_line_numbers(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source="\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("read_resume")
+    assert tool is not None
+
+    result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
+
+    assert result == (
+        "1\t\\documentclass{article}\n"
+        "2\t\\begin{document}\n"
+        "3\tHello\n"
+        "4\t\\end{document}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_resume_rejects_invalid_uuid() -> None:
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("read_resume")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Invalid resume_id: expected a UUID string"):
+        await tool.fn(resume_id="not-a-uuid", ctx=_FakeToolContext("test-user"))
+
+
+@pytest.mark.asyncio
+async def test_read_resume_rejects_other_users_resume(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="other-user",
+                title="Resume",
+                latex_source="secret",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("read_resume")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Resume not found"):
+        await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
+
+
+@pytest.mark.asyncio
+async def test_read_resume_rejects_nonexistent_resume(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("read_resume")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Resume not found"):
+        await tool.fn(resume_id=str(uuid.uuid4()), ctx=_FakeToolContext("test-user"))

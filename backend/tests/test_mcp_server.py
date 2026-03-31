@@ -136,6 +136,7 @@ async def test_create_mcp_server_registers_resume_tools() -> None:
     assert "search_replace" in tool_names
     assert "insert_content" in tool_names
     assert "delete_content" in tool_names
+    assert "batch_edit" in tool_names
     assert "compile_resume" in tool_names
 
 
@@ -587,16 +588,24 @@ async def test_search_replace_rejects_ambiguous_match(
     tool = await mcp.get_tool("search_replace")
     assert tool is not None
 
-    with pytest.raises(
-        ToolError,
-        match=r"Found 2 matches\. Provide more surrounding context for a unique match\.",
-    ):
+    with pytest.raises(ToolError) as exc_info:
         await tool.fn(
             resume_id=str(resume_id),
             search="duplicate",
             replace="unique",
             ctx=_FakeToolContext("test-user"),
         )
+
+    assert str(exc_info.value) == (
+        "Found 2 matches. Include more surrounding context to target a specific one.\n\n"
+        "Match 1 (line 1):\n"
+        "1\tduplicate\n"
+        "2\tvalue\n\n"
+        "Match 2 (line 3):\n"
+        "2\tvalue\n"
+        "3\tduplicate\n"
+        "4\tvalue"
+    )
 
 
 @pytest.mark.asyncio
@@ -630,16 +639,20 @@ async def test_search_replace_rejects_ambiguous_normalized_match(
     tool = await mcp.get_tool("search_replace")
     assert tool is not None
 
-    with pytest.raises(
-        ToolError,
-        match=r"Found 2 matches\. Provide more surrounding context for a unique match\.",
-    ):
+    with pytest.raises(ToolError) as exc_info:
         await tool.fn(
             resume_id=str(resume_id),
             search="duplicate\n\nvalue",
             replace="unique",
             ctx=_FakeToolContext("test-user"),
         )
+
+    message = str(exc_info.value)
+    assert message.startswith("Found 2 matches. Include more surrounding context to target a specific one.\n\n")
+    assert "Match 1 (" in message
+    assert "Match 2 (" in message
+    assert "1\tduplicate   " in message
+    assert "4\tvalue" in message
 
 
 @pytest.mark.asyncio
@@ -959,16 +972,17 @@ async def test_insert_content_rejects_ambiguous_anchor(
     tool = await mcp.get_tool("insert_content")
     assert tool is not None
 
-    with pytest.raises(
-        ToolError,
-        match=r"Found 2 matches\. Provide more surrounding context for a unique match\.",
-    ):
+    with pytest.raises(ToolError) as exc_info:
         await tool.fn(
             resume_id=str(resume_id),
             after="duplicate",
             content="unique",
             ctx=_FakeToolContext("test-user"),
         )
+
+    assert "Found 2 matches. Include more surrounding context to target a specific one." in str(exc_info.value)
+    assert "Match 1 (line 1):" in str(exc_info.value)
+    assert "Match 2 (line 3):" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -1211,15 +1225,70 @@ async def test_delete_content_rejects_ambiguous_match(
     tool = await mcp.get_tool("delete_content")
     assert tool is not None
 
-    with pytest.raises(
-        ToolError,
-        match=r"Found 2 matches\. Provide more surrounding context for a unique match\.",
-    ):
+    with pytest.raises(ToolError) as exc_info:
         await tool.fn(
             resume_id=str(resume_id),
             text="duplicate",
             ctx=_FakeToolContext("test-user"),
         )
+
+    assert str(exc_info.value) == (
+        "Found 2 matches. Include more surrounding context to target a specific one.\n\n"
+        "Match 1 (line 1):\n"
+        "1\tduplicate\n"
+        "2\tvalue\n\n"
+        "Match 2 (line 3):\n"
+        "2\tvalue\n"
+        "3\tduplicate\n"
+        "4\tvalue"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_caps_ambiguous_match_context_at_five_results(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "\n".join(["duplicate"] * 6)
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.fn(
+            resume_id=str(resume_id),
+            search="duplicate",
+            replace="unique",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+    message = str(exc_info.value)
+    assert "Found 6 matches. Include more surrounding context to target a specific one." in message
+    assert "Match 5 (line 5):" in message
+    assert "Match 6" not in message
+    assert "...and 1 more matches." in message
 
 
 @pytest.mark.asyncio
@@ -1259,6 +1328,207 @@ async def test_delete_content_rejects_other_users_resume(
             text="secret",
             ctx=_FakeToolContext("test-user"),
         )
+
+
+@pytest.mark.asyncio
+async def test_batch_edit_applies_mixed_operations_sequentially(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = (
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "Alice Example   \n"
+        "alice@example.com\n"
+        "\\section*{Experience}\n"
+        "Old project\n"
+        "Legacy skill\n"
+        "\\end{document}"
+    )
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("batch_edit")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        operations=[
+            {
+                "type": "search_replace",
+                "search": "Alice Example\nalice@example.com",
+                "replace": "Alice Johnson\nalice@new.dev",
+            },
+            {
+                "type": "insert",
+                "after": "Alice Johnson\nalice@new.dev\n\\section*{Experience}\nOld project",
+                "content": "New project",
+            },
+            {
+                "type": "delete",
+                "text": "Legacy skill\n",
+            },
+        ],
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result == (
+        "Applied 3 operations successfully.\n\n"
+        "[1] search_replace (lines 3-4): Replaced 1 match (whitespace-adjusted).\n"
+        "[2] insert (after lines 3-6): Inserted 1 line.\n"
+        "[3] delete (line 8): Deleted 1 match."
+    )
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == (
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "Alice Johnson\n"
+        "alice@new.dev\n"
+        "\\section*{Experience}\n"
+        "Old project\n"
+        "New project\n"
+        "\\end{document}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_edit_rolls_back_all_changes_when_a_later_operation_fails(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "Header\nUnique line\nrepeat\nrepeat\nTail"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("batch_edit")
+    assert tool is not None
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.fn(
+            resume_id=str(resume_id),
+            operations=[
+                {
+                    "type": "search_replace",
+                    "search": "Unique line",
+                    "replace": "Updated line",
+                },
+                {
+                    "type": "delete",
+                    "text": "repeat",
+                },
+            ],
+            ctx=_FakeToolContext("test-user"),
+        )
+
+    assert str(exc_info.value) == (
+        "Operation 2 failed: Found 2 matches. Include more surrounding context to target a specific one.\n\n"
+        "Match 1 (line 3):\n"
+        "2\tUpdated line\n"
+        "3\trepeat\n"
+        "4\trepeat\n\n"
+        "Match 2 (line 4):\n"
+        "3\trepeat\n"
+        "4\trepeat\n"
+        "5\tTail\n\n"
+        "No changes were saved. Operation 1 was rolled back."
+    )
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == original_latex
+
+
+@pytest.mark.asyncio
+async def test_batch_edit_returns_without_saving_when_operations_are_empty(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "\\documentclass{article}\n\\begin{document}\nResume\n\\end{document}"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("batch_edit")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        operations=[],
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result == "No operations to apply."
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == original_latex
 
 
 @pytest.mark.asyncio

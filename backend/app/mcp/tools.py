@@ -9,7 +9,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import CurrentContext
 
 from app.core.compile import CompileError, CompileServiceUnavailable, compile_latex
-from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes, update_resume_latex
+from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes
 from app.mcp import get_session
 from app.models.resume import Resume
 
@@ -26,6 +26,13 @@ class _NormalizedText:
     text: str
     starts: list[int]
     ends: list[int]
+
+
+@dataclass(frozen=True)
+class _EditApplication:
+    updated_latex: str
+    result: str
+    summary: str
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -68,23 +75,11 @@ def register_tools(mcp: FastMCP) -> None:
             except ResumeNotFoundError as err:
                 raise ToolError(err.detail) from err
 
-            original_latex = resume.latex_source
-            match = _find_unique_match(
-                original_latex,
-                search,
-                not_found_message="Text not found. Verify the exact text exists in the resume.",
-            )
-            updated_latex = original_latex[: match.start] + replace + original_latex[match.end :]
-            await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
+            application = _apply_search_replace(resume.latex_source, search, replace)
+            resume.latex_source = application.updated_latex
+            await session.commit()
 
-        return _format_search_replace_result(
-            original_latex,
-            updated_latex,
-            match.start,
-            match.end,
-            replace,
-            whitespace_adjusted=match.whitespace_adjusted,
-        )
+        return application.result
 
     @mcp.tool
     async def insert_content(
@@ -104,24 +99,11 @@ def register_tools(mcp: FastMCP) -> None:
             except ResumeNotFoundError as err:
                 raise ToolError(err.detail) from err
 
-            original_latex = resume.latex_source
-            match = _find_unique_match(
-                original_latex,
-                after,
-                not_found_message="Anchor not found. Verify the exact anchor text exists in the resume.",
-            )
-            insert_at = match.end
-            updated_latex = original_latex[:insert_at] + "\n" + content + original_latex[insert_at:]
-            await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
+            application = _apply_insert_content(resume.latex_source, after, content)
+            resume.latex_source = application.updated_latex
+            await session.commit()
 
-        return _format_insert_content_result(
-            original_latex,
-            updated_latex,
-            match.start,
-            match.end,
-            content,
-            whitespace_adjusted=match.whitespace_adjusted,
-        )
+        return application.result
 
     @mcp.tool
     async def delete_content(
@@ -139,22 +121,52 @@ def register_tools(mcp: FastMCP) -> None:
             except ResumeNotFoundError as err:
                 raise ToolError(err.detail) from err
 
-            original_latex = resume.latex_source
-            match = _find_unique_match(
-                original_latex,
-                text,
-                not_found_message="Text not found. Verify the exact text exists in the resume.",
-            )
-            updated_latex = original_latex[: match.start] + original_latex[match.end :]
-            await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
+            application = _apply_delete_content(resume.latex_source, text)
+            resume.latex_source = application.updated_latex
+            await session.commit()
 
-        return _format_delete_content_result(
-            original_latex,
-            updated_latex,
-            match.start,
-            match.end,
-            whitespace_adjusted=match.whitespace_adjusted,
-        )
+        return application.result
+
+    @mcp.tool
+    async def batch_edit(
+        resume_id: str,
+        operations: list[dict[str, Any]],
+        ctx: Context = CurrentContext(),
+    ) -> str:
+        user_id = await _require_user_id(ctx)
+        parsed_resume_id = _parse_uuid(resume_id)
+
+        async with get_session() as session:
+            try:
+                resume = await get_resume(session, user_id, parsed_resume_id)
+            except ResumeNotFoundError as err:
+                raise ToolError(err.detail) from err
+
+            if not operations:
+                return "No operations to apply."
+
+            working_latex = resume.latex_source
+            applications: list[_EditApplication] = []
+
+            for operation_index, operation in enumerate(operations, start=1):
+                try:
+                    application = _apply_batch_operation(working_latex, operation)
+                except ToolError as err:
+                    raise ToolError(
+                        _format_batch_failure_result(
+                            operation_index,
+                            str(err),
+                            completed_count=len(applications),
+                        )
+                    ) from err
+
+                working_latex = application.updated_latex
+                applications.append(application)
+
+            resume.latex_source = working_latex
+            await session.commit()
+
+        return _format_batch_success_result(applications)
 
     @mcp.tool
     async def compile_resume(resume_id: str, ctx: Context = CurrentContext()) -> str:
@@ -200,34 +212,201 @@ def _validate_non_empty_text(value: str, field_name: str) -> None:
         raise ToolError(f"Invalid {field_name}: must be a non-empty string")
 
 
+def _apply_batch_operation(
+    latex_source: str,
+    operation: dict[str, Any],
+) -> _EditApplication:
+    if not isinstance(operation, dict):
+        raise ToolError("Invalid operation: expected an object.")
+
+    operation_type = operation.get("type")
+    if operation_type == "search_replace":
+        search = _require_string_field(operation, "search", allow_empty=False)
+        replace = _require_string_field(operation, "replace", allow_empty=True)
+        return _apply_search_replace(latex_source, search, replace)
+    if operation_type == "insert":
+        after = _require_string_field(operation, "after", allow_empty=False)
+        content = _require_string_field(operation, "content", allow_empty=False)
+        return _apply_insert_content(latex_source, after, content)
+    if operation_type == "delete":
+        text = _require_string_field(operation, "text", allow_empty=False)
+        return _apply_delete_content(latex_source, text)
+
+    raise ToolError(
+        f"Invalid operation type {operation_type!r}. Expected one of "
+        "'search_replace', 'insert', or 'delete'."
+    )
+
+
+def _require_string_field(
+    operation: dict[str, Any],
+    field_name: str,
+    *,
+    allow_empty: bool,
+) -> str:
+    value = operation.get(field_name)
+    if not isinstance(value, str):
+        raise ToolError(f"Field {field_name!r} must be a string.")
+    if not allow_empty and not value:
+        raise ToolError(f"Field {field_name!r} must be non-empty.")
+    return value
+
+
+def _apply_search_replace(latex_source: str, search: str, replace: str) -> _EditApplication:
+    _validate_search_text(search)
+
+    match = _find_unique_match(
+        latex_source,
+        search,
+        not_found_message="Text not found. Verify the exact text exists in the resume.",
+    )
+    updated_latex = latex_source[: match.start] + replace + latex_source[match.end :]
+    line_range = _format_line_range(latex_source, match.start, match.end)
+
+    return _EditApplication(
+        updated_latex=updated_latex,
+        result=_format_search_replace_result(
+            latex_source,
+            updated_latex,
+            match.start,
+            match.end,
+            replace,
+            whitespace_adjusted=match.whitespace_adjusted,
+        ),
+        summary=(
+            f"search_replace ({line_range}): "
+            f"{_format_match_result_prefix('Replaced 1 match', match.whitespace_adjusted)}"
+        ),
+    )
+
+
+def _apply_insert_content(latex_source: str, after: str, content: str) -> _EditApplication:
+    _validate_non_empty_text(after, "after")
+    _validate_non_empty_text(content, "content")
+
+    match = _find_unique_match(
+        latex_source,
+        after,
+        not_found_message="Anchor not found. Verify the exact anchor text exists in the resume.",
+    )
+    insert_at = match.end
+    updated_latex = latex_source[:insert_at] + "\n" + content + latex_source[insert_at:]
+    anchor_range = _format_line_range(latex_source, match.start, match.end)
+    line_count = _count_lines(content)
+    line_label = "line" if line_count == 1 else "lines"
+    whitespace_suffix = " (whitespace-adjusted)" if match.whitespace_adjusted else ""
+
+    return _EditApplication(
+        updated_latex=updated_latex,
+        result=_format_insert_content_result(
+            latex_source,
+            updated_latex,
+            match.start,
+            match.end,
+            content,
+            whitespace_adjusted=match.whitespace_adjusted,
+        ),
+        summary=f"insert (after {anchor_range}): Inserted {line_count} {line_label}{whitespace_suffix}.",
+    )
+
+
+def _apply_delete_content(latex_source: str, text: str) -> _EditApplication:
+    _validate_non_empty_text(text, "text")
+
+    match = _find_unique_match(
+        latex_source,
+        text,
+        not_found_message="Text not found. Verify the exact text exists in the resume.",
+    )
+    updated_latex = latex_source[: match.start] + latex_source[match.end :]
+    line_range = _format_line_range(latex_source, match.start, match.end)
+
+    return _EditApplication(
+        updated_latex=updated_latex,
+        result=_format_delete_content_result(
+            latex_source,
+            updated_latex,
+            match.start,
+            match.end,
+            whitespace_adjusted=match.whitespace_adjusted,
+        ),
+        summary=(
+            f"delete ({line_range}): "
+            f"{_format_match_result_prefix('Deleted 1 match', match.whitespace_adjusted)}"
+        ),
+    )
+
+
 def _find_unique_match(text: str, needle: str, *, not_found_message: str) -> _MatchSpan:
-    match_count = text.count(needle)
-    if match_count == 0:
+    exact_matches = _find_match_spans(text, needle)
+    if not exact_matches:
         normalized_text = _normalize_whitespace(text)
         normalized_needle = _normalize_whitespace(needle)
 
         if not normalized_needle.text:
             raise ToolError(not_found_message)
 
-        normalized_match_count = normalized_text.text.count(normalized_needle.text)
-        if normalized_match_count == 0:
+        normalized_starts = _find_match_starts(normalized_text.text, normalized_needle.text)
+        if not normalized_starts:
             raise ToolError(not_found_message)
-        if normalized_match_count > 1:
-            raise ToolError(
-                f"Found {normalized_match_count} matches. Provide more surrounding context for a unique match."
-            )
 
-        normalized_start = normalized_text.text.find(normalized_needle.text)
-        normalized_end = normalized_start + len(normalized_needle.text)
-        return _MatchSpan(
-            start=normalized_text.starts[normalized_start],
-            end=normalized_text.ends[normalized_end - 1],
-            whitespace_adjusted=True,
-        )
-    if match_count > 1:
-        raise ToolError(f"Found {match_count} matches. Provide more surrounding context for a unique match.")
-    match_start = text.find(needle)
-    return _MatchSpan(start=match_start, end=match_start + len(needle))
+        normalized_matches = [
+            _MatchSpan(
+                start=normalized_text.starts[normalized_start],
+                end=normalized_text.ends[normalized_start + len(normalized_needle.text) - 1],
+                whitespace_adjusted=True,
+            )
+            for normalized_start in normalized_starts
+        ]
+        if len(normalized_matches) > 1:
+            raise ToolError(_format_ambiguous_match_error(text, normalized_matches))
+
+        return normalized_matches[0]
+
+    if len(exact_matches) > 1:
+        raise ToolError(_format_ambiguous_match_error(text, exact_matches))
+
+    return exact_matches[0]
+
+
+def _find_match_spans(text: str, needle: str) -> list[_MatchSpan]:
+    return [
+        _MatchSpan(start=match_start, end=match_start + len(needle))
+        for match_start in _find_match_starts(text, needle)
+    ]
+
+
+def _find_match_starts(text: str, needle: str) -> list[int]:
+    if not needle:
+        return []
+
+    starts: list[int] = []
+    search_start = 0
+    while True:
+        match_start = text.find(needle, search_start)
+        if match_start == -1:
+            return starts
+        starts.append(match_start)
+        search_start = match_start + len(needle)
+
+
+def _format_ambiguous_match_error(
+    text: str,
+    matches: Sequence[_MatchSpan],
+    *,
+    limit: int = 5,
+) -> str:
+    parts = [f"Found {len(matches)} matches. Include more surrounding context to target a specific one."]
+
+    for index, match in enumerate(matches[:limit], start=1):
+        line_range, snippet = _format_context_with_line_numbers(text, match.start, match.end)
+        parts.append(f"Match {index} ({line_range}):\n{snippet}")
+
+    remaining = len(matches) - min(len(matches), limit)
+    if remaining > 0:
+        parts.append(f"...and {remaining} more matches.")
+
+    return "\n\n".join(parts)
 
 
 def _normalize_whitespace(text: str) -> _NormalizedText:
@@ -377,6 +556,30 @@ def _format_match_result_prefix(action: str, whitespace_adjusted: bool) -> str:
     return f"{action}{suffix}."
 
 
+def _format_batch_success_result(applications: Sequence[_EditApplication]) -> str:
+    operation_label = "operation" if len(applications) == 1 else "operations"
+    summary_lines = "\n".join(
+        f"[{index}] {application.summary}" for index, application in enumerate(applications, start=1)
+    )
+    return f"Applied {len(applications)} {operation_label} successfully.\n\n{summary_lines}"
+
+
+def _format_batch_failure_result(operation_index: int, detail: str, *, completed_count: int) -> str:
+    if completed_count == 0:
+        rollback_message = "No changes were saved."
+    elif completed_count == 1:
+        rollback_message = "No changes were saved. Operation 1 was rolled back."
+    else:
+        rollback_message = f"No changes were saved. Operations 1-{completed_count} were rolled back."
+
+    return f"Operation {operation_index} failed: {detail}\n\n{rollback_message}"
+
+
+def _count_lines(text: str) -> int:
+    line_count = len(text.splitlines())
+    return line_count or 1
+
+
 def _format_compile_error_result(detail: Any) -> str:
     if isinstance(detail, dict):
         parts = ["Compilation failed."]
@@ -439,12 +642,16 @@ def _format_context_with_line_numbers(
         for line_number in range(snippet_start_line, snippet_end_line + 1)
     )
 
-    if start_line == end_line:
-        line_range = f"line {start_line}"
-    else:
-        line_range = f"lines {start_line}-{end_line}"
+    return _format_line_range(text, start_index, end_index), snippet
 
-    return line_range, snippet
+
+def _format_line_range(text: str, start_index: int, end_index: int) -> str:
+    start_line = _line_number_at_index(text, start_index)
+    end_reference_index = start_index if end_index <= start_index else end_index - 1
+    end_line = _line_number_at_index(text, end_reference_index)
+    if start_line == end_line:
+        return f"line {start_line}"
+    return f"lines {start_line}-{end_line}"
 
 
 def _line_number_at_index(text: str, index: int) -> int:

@@ -1,11 +1,13 @@
 import json
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import CurrentContext
 
+from app.core.compile import CompileError, CompileServiceUnavailable, compile_latex
 from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes, update_resume_latex
 from app.mcp import get_session
 from app.models.resume import Resume
@@ -122,6 +124,26 @@ def register_tools(mcp: FastMCP) -> None:
             await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
 
         return _format_delete_content_result(original_latex, updated_latex, match_start, text)
+
+    @mcp.tool
+    async def compile_resume(resume_id: str, ctx: Context = CurrentContext()) -> str:
+        user_id = await _require_user_id(ctx)
+        parsed_resume_id = _parse_uuid(resume_id)
+
+        async with get_session() as session:
+            try:
+                resume = await get_resume(session, user_id, parsed_resume_id)
+            except ResumeNotFoundError as err:
+                raise ToolError(err.detail) from err
+
+        try:
+            await compile_latex(resume.latex_source)
+        except CompileServiceUnavailable as err:
+            raise ToolError("Compilation service is currently unavailable. Try again later.") from err
+        except CompileError as err:
+            return _format_compile_error_result(err.detail)
+
+        return "Compilation successful. Resume compiles without errors."
 
 
 async def _require_user_id(ctx: Context) -> str:
@@ -249,6 +271,46 @@ def _format_delete_content_result(
         f"Removed ({deleted_range}):\n{deleted_snippet}\n"
         f"After deletion ({after_range}):\n{after_snippet}"
     )
+
+
+def _format_compile_error_result(detail: Any) -> str:
+    if isinstance(detail, dict):
+        parts = ["Compilation failed."]
+        message = _stringify_compile_detail(detail.get("message") or detail.get("detail"))
+        log = _stringify_compile_detail(detail.get("log"))
+
+        if message:
+            parts.append(f"Message: {message}")
+        if log:
+            parts.append(f"Log:\n{log}")
+
+        remaining = {
+            key: value
+            for key, value in detail.items()
+            if key not in {"success", "message", "log", "detail"} and value is not None
+        }
+        if remaining:
+            parts.append(
+                "Additional details:\n"
+                f"{json.dumps(remaining, ensure_ascii=False, indent=2, sort_keys=True)}"
+            )
+
+        if len(parts) == 1:
+            parts.append(_stringify_compile_detail(detail))
+
+        return "\n".join(parts)
+
+    return f"Compilation failed.\n{_stringify_compile_detail(detail)}"
+
+
+def _stringify_compile_detail(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+    return str(value)
 
 
 def _format_context_with_line_numbers(

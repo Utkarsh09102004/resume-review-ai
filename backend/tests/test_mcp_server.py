@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from app.core.auth import AuthError
+from app.core.compile import CompileError, CompileServiceUnavailable
 from app.mcp.auth_middleware import BearerAuthHTTPMiddleware, LogtoAuthMiddleware
 from app.mcp.tools import register_tools
 from app.models.resume import Resume
@@ -135,6 +136,7 @@ async def test_create_mcp_server_registers_resume_tools() -> None:
     assert "search_replace" in tool_names
     assert "insert_content" in tool_names
     assert "delete_content" in tool_names
+    assert "compile_resume" in tool_names
 
 
 @pytest.mark.asyncio
@@ -940,3 +942,185 @@ async def test_delete_content_rejects_other_users_resume(
             text="secret",
             ctx=_FakeToolContext("test-user"),
         )
+
+
+@pytest.mark.asyncio
+async def test_compile_resume_returns_success_for_valid_latex(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    latex_source = "\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=latex_source,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+    compile_mock = AsyncMock(return_value=b"%PDF-1.4 fake")
+    monkeypatch.setattr("app.mcp.tools.compile_latex", compile_mock)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("compile_resume")
+    assert tool is not None
+
+    result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
+
+    assert result == "Compilation successful. Resume compiles without errors."
+    compile_mock.assert_awaited_once_with(latex_source)
+
+
+@pytest.mark.asyncio
+async def test_compile_resume_returns_readable_feedback_for_latex_errors(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    latex_source = "\\badcommand"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Broken Resume",
+                latex_source=latex_source,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+    compile_mock = AsyncMock(
+        side_effect=CompileError(
+            400,
+            {
+                "success": False,
+                "message": "! Undefined control sequence.",
+                "log": "l.3 \\\\badcommand",
+            },
+        )
+    )
+    monkeypatch.setattr("app.mcp.tools.compile_latex", compile_mock)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("compile_resume")
+    assert tool is not None
+
+    result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
+
+    assert result == (
+        "Compilation failed.\n"
+        "Message: ! Undefined control sequence.\n"
+        "Log:\n"
+        "l.3 \\\\badcommand"
+    )
+    compile_mock.assert_awaited_once_with(latex_source)
+
+
+@pytest.mark.asyncio
+async def test_compile_resume_raises_tool_error_when_service_is_unavailable(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source="\\documentclass{article}",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+    monkeypatch.setattr(
+        "app.mcp.tools.compile_latex",
+        AsyncMock(side_effect=CompileServiceUnavailable()),
+    )
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("compile_resume")
+    assert tool is not None
+
+    with pytest.raises(
+        ToolError,
+        match=r"Compilation service is currently unavailable\. Try again later\.",
+    ):
+        await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
+
+
+@pytest.mark.asyncio
+async def test_compile_resume_rejects_invalid_uuid() -> None:
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("compile_resume")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Invalid resume_id: expected a UUID string"):
+        await tool.fn(resume_id="not-a-uuid", ctx=_FakeToolContext("test-user"))
+
+
+@pytest.mark.asyncio
+async def test_compile_resume_rejects_other_users_resume(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="other-user",
+                title="Resume",
+                latex_source="secret",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("compile_resume")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Resume not found"):
+        await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))

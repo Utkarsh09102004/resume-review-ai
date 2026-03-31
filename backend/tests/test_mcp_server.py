@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import MiddlewareContext
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
 from starlette.middleware import Middleware as ASGIMiddleware
@@ -123,7 +124,7 @@ async def test_fastmcp_middleware_sets_user_id_state(
 
 
 @pytest.mark.asyncio
-async def test_create_mcp_server_registers_read_only_resume_tools() -> None:
+async def test_create_mcp_server_registers_resume_tools() -> None:
     server = create_mcp_server()
 
     tools = await server.list_tools(run_middleware=False)
@@ -131,6 +132,7 @@ async def test_create_mcp_server_registers_read_only_resume_tools() -> None:
 
     assert "list_user_resumes" in tool_names
     assert "read_resume" in tool_names
+    assert "search_replace" in tool_names
 
 
 @pytest.mark.asyncio
@@ -297,3 +299,218 @@ async def test_read_resume_rejects_nonexistent_resume(
 
     with pytest.raises(ToolError, match="Resume not found"):
         await tool.fn(resume_id=str(uuid.uuid4()), ctx=_FakeToolContext("test-user"))
+
+
+@pytest.mark.asyncio
+async def test_search_replace_updates_owned_resume_and_returns_context(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "\\documentclass{article}\n\\begin{document}\nOld role title\n\\end{document}"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    result = await tool.fn(
+        resume_id=str(resume_id),
+        search="Old role title",
+        replace="Senior role title",
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    assert result == (
+        "Replaced 1 match.\n"
+        "Before (line 3):\n"
+        "2\t\\begin{document}\n"
+        "3\tOld role title\n"
+        "4\t\\end{document}\n"
+        "After (line 3):\n"
+        "2\t\\begin{document}\n"
+        "3\tSenior role title\n"
+        "4\t\\end{document}"
+    )
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == (
+        "\\documentclass{article}\n\\begin{document}\nSenior role title\n\\end{document}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_rejects_invalid_uuid() -> None:
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Invalid resume_id: expected a UUID string"):
+        await tool.fn(
+            resume_id="not-a-uuid",
+            search="old",
+            replace="new",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_rejects_empty_search() -> None:
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Invalid search: must be a non-empty string"):
+        await tool.fn(
+            resume_id=str(uuid.uuid4()),
+            search="",
+            replace="new",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_rejects_missing_text(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source="one unique line",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match=r"Text not found\. Verify the exact text exists in the resume\."):
+        await tool.fn(
+            resume_id=str(resume_id),
+            search="missing",
+            replace="new",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_rejects_ambiguous_match(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source="duplicate\nvalue\nduplicate\nvalue",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(
+        ToolError,
+        match=r"Found 2 matches\. Provide more surrounding context for a unique match\.",
+    ):
+        await tool.fn(
+            resume_id=str(resume_id),
+            search="duplicate",
+            replace="unique",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_rejects_other_users_resume(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="other-user",
+                title="Resume",
+                latex_source="secret",
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(ToolError, match="Resume not found"):
+        await tool.fn(
+            resume_id=str(resume_id),
+            search="secret",
+            replace="shared",
+            ctx=_FakeToolContext("test-user"),
+        )

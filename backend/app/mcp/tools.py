@@ -6,7 +6,7 @@ from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import CurrentContext
 
-from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes
+from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes, update_resume_latex
 from app.mcp import get_session
 from app.models.resume import Resume
 
@@ -34,6 +34,38 @@ def register_tools(mcp: FastMCP) -> None:
 
         return _format_latex_with_line_numbers(resume.latex_source)
 
+    @mcp.tool
+    async def search_replace(
+        resume_id: str,
+        search: str,
+        replace: str,
+        ctx: Context = CurrentContext(),
+    ) -> str:
+        user_id = await _require_user_id(ctx)
+        parsed_resume_id = _parse_uuid(resume_id)
+        _validate_search_text(search)
+
+        async with get_session() as session:
+            try:
+                resume = await get_resume(session, user_id, parsed_resume_id)
+            except ResumeNotFoundError as err:
+                raise ToolError(err.detail) from err
+
+            original_latex = resume.latex_source
+            match_count = original_latex.count(search)
+            if match_count == 0:
+                raise ToolError("Text not found. Verify the exact text exists in the resume.")
+            if match_count > 1:
+                raise ToolError(
+                    f"Found {match_count} matches. Provide more surrounding context for a unique match."
+                )
+
+            match_start = original_latex.find(search)
+            updated_latex = original_latex.replace(search, replace, 1)
+            await update_resume_latex(session, user_id, parsed_resume_id, updated_latex)
+
+        return _format_search_replace_result(original_latex, updated_latex, match_start, search, replace)
+
 
 async def _require_user_id(ctx: Context) -> str:
     user_id = await ctx.get_state("user_id")
@@ -47,6 +79,11 @@ def _parse_uuid(value: str) -> uuid.UUID:
         return uuid.UUID(value)
     except ValueError as err:
         raise ToolError("Invalid resume_id: expected a UUID string") from err
+
+
+def _validate_search_text(search: str) -> None:
+    if not search:
+        raise ToolError("Invalid search: must be a non-empty string")
 
 
 def _format_resume_list(resumes: Sequence[Resume]) -> str:
@@ -67,3 +104,63 @@ def _format_latex_with_line_numbers(latex_source: str) -> str:
         lines = [""]
 
     return "\n".join(f"{line_number}\t{line}" for line_number, line in enumerate(lines, start=1))
+
+
+def _format_search_replace_result(
+    original_latex: str,
+    updated_latex: str,
+    match_start: int,
+    search: str,
+    replace: str,
+) -> str:
+    before_range, before_snippet = _format_context_with_line_numbers(
+        original_latex,
+        match_start,
+        match_start + len(search),
+    )
+    after_range, after_snippet = _format_context_with_line_numbers(
+        updated_latex,
+        match_start,
+        match_start + len(replace),
+    )
+
+    return (
+        "Replaced 1 match.\n"
+        f"Before ({before_range}):\n{before_snippet}\n"
+        f"After ({after_range}):\n{after_snippet}"
+    )
+
+
+def _format_context_with_line_numbers(
+    text: str,
+    start_index: int,
+    end_index: int,
+    context_lines: int = 1,
+) -> tuple[str, str]:
+    lines = text.splitlines()
+    if not lines:
+        lines = [""]
+
+    total_lines = len(lines)
+    start_line = _line_number_at_index(text, start_index)
+    end_reference_index = start_index if end_index <= start_index else end_index - 1
+    end_line = _line_number_at_index(text, end_reference_index)
+
+    snippet_start_line = max(1, start_line - context_lines)
+    snippet_end_line = min(total_lines, end_line + context_lines)
+    snippet = "\n".join(
+        f"{line_number}\t{lines[line_number - 1]}"
+        for line_number in range(snippet_start_line, snippet_end_line + 1)
+    )
+
+    if start_line == end_line:
+        line_range = f"line {start_line}"
+    else:
+        line_range = f"lines {start_line}-{end_line}"
+
+    return line_range, snippet
+
+
+def _line_number_at_index(text: str, index: int) -> int:
+    bounded_index = max(0, min(index, len(text)))
+    return text.count("\n", 0, bounded_index) + 1

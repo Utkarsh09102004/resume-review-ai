@@ -1292,6 +1292,63 @@ async def test_search_replace_caps_ambiguous_match_context_at_five_results(
 
 
 @pytest.mark.asyncio
+async def test_search_replace_lists_all_ambiguous_match_locations_when_under_cap(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "Header\nduplicate\nMiddle\nduplicate\nFooter\nduplicate\nTail"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.fn(
+            resume_id=str(resume_id),
+            search="duplicate",
+            replace="unique",
+            ctx=_FakeToolContext("test-user"),
+        )
+
+    assert str(exc_info.value) == (
+        "Found 3 matches. Include more surrounding context to target a specific one.\n\n"
+        "Match 1 (line 2):\n"
+        "1\tHeader\n"
+        "2\tduplicate\n"
+        "3\tMiddle\n\n"
+        "Match 2 (line 4):\n"
+        "3\tMiddle\n"
+        "4\tduplicate\n"
+        "5\tFooter\n\n"
+        "Match 3 (line 6):\n"
+        "5\tFooter\n"
+        "6\tduplicate\n"
+        "7\tTail"
+    )
+
+
+@pytest.mark.asyncio
 async def test_delete_content_rejects_other_users_resume(
     test_engine,
     monkeypatch: pytest.MonkeyPatch,

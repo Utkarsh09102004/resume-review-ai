@@ -1,6 +1,6 @@
 # ── ResumeForge — setup, lint & type-check ─────────────────────────
 
-.PHONY: setup install-backend install-frontend lint lint-backend lint-frontend typecheck typecheck-backend typecheck-frontend build build-frontend fmt check test test-backend test-frontend test-cov
+.PHONY: setup install-backend install-frontend lint lint-backend lint-frontend typecheck typecheck-backend typecheck-frontend build build-frontend fmt check test test-backend test-frontend test-cov run-mcp
 
 # ── Individual targets ──────────────────────────────────────────────
 
@@ -17,7 +17,10 @@ lint-frontend:
 	cd frontend && npm run lint
 
 typecheck-backend:
-	cd backend && uv run mypy app/
+	cd backend && uv run mypy app/ mcp_server.py
+
+run-mcp:
+	cd backend && set -a && { [ -f ../.env ] && . ../.env || true; } && set +a && uv run python mcp_server.py
 
 typecheck-frontend:
 	cd frontend && npm run typecheck

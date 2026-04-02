@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.resume_ops import (
     ResumeNotFoundError,
+    apply_resume_updates,
 )
 from app.core.resume_ops import (
     get_resume as get_owned_resume,
@@ -86,20 +87,17 @@ async def update_resume(
     session: AsyncSession = Depends(get_db),
 ) -> Resume:
     try:
-        resume = await get_owned_resume(session, user_id, resume_id)
+        return await apply_resume_updates(
+            session,
+            user_id,
+            resume_id,
+            **body.model_dump(exclude_unset=True),
+        )
     except ResumeNotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=err.detail,
         ) from err
-
-    update_data = body.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(resume, field, value)
-
-    await session.commit()
-    await session.refresh(resume)
-    return resume
 
 
 @router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)

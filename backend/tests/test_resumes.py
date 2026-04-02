@@ -1,5 +1,7 @@
 import uuid
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -8,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.database import get_db
 from app.main import app
 from app.middleware.auth import get_current_user
+from app.models.resume import Resume
 from app.schemas.resume import DEFAULT_LATEX_TEMPLATE
 
 
@@ -337,6 +340,30 @@ async def test_update_resume_partial_latex_only(client: AsyncClient) -> None:
     data = resp.json()
     assert data["title"] == "Keep This Title"
     assert data["latex_source"] == new_latex
+
+
+@pytest.mark.asyncio
+async def test_update_resume_route_uses_shared_update_service(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume_id = uuid.uuid4()
+    updated_resume = Resume(
+        id=resume_id,
+        user_id="test-user",
+        title="Patched Title",
+        latex_source="patched source",
+        created_at=datetime(2026, 4, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+    update_mock = AsyncMock(return_value=updated_resume)
+    monkeypatch.setattr("app.routes.resumes.apply_resume_updates", update_mock)
+
+    response = await client.put(f"/api/resumes/{resume_id}", json={"title": "Patched Title"})
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Patched Title"
+    update_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio

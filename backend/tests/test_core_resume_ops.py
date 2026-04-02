@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes, update_resume_latex
+from app.core.resume_ops import ResumeNotFoundError, apply_resume_updates, get_resume, list_resumes
 from app.models.resume import Resume
 
 
@@ -85,7 +85,7 @@ async def test_get_resume_wrong_owner(test_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_resume_latex(test_session) -> None:
+async def test_apply_resume_updates(test_session) -> None:
     resume_id = uuid.uuid4()
     test_session.add(
         Resume(
@@ -97,9 +97,17 @@ async def test_update_resume_latex(test_session) -> None:
     )
     await test_session.commit()
 
-    updated = await update_resume_latex(test_session, "test-user", resume_id, "new source")
+    updated = await apply_resume_updates(
+        test_session,
+        "test-user",
+        resume_id,
+        title="Updated Resume",
+        latex_source="new source",
+    )
 
+    assert updated.title == "Updated Resume"
     assert updated.latex_source == "new source"
 
     saved = await get_resume(test_session, "test-user", resume_id)
+    assert saved.title == "Updated Resume"
     assert saved.latex_source == "new source"

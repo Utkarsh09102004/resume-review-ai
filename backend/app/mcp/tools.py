@@ -9,8 +9,8 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import CurrentContext
 
 from app.core.compile import CompileError, CompileServiceUnavailable, compile_latex
-from app.core.resume_ops import ResumeNotFoundError, get_resume, list_resumes
-from app.mcp import get_session
+from app.core.resume_ops import ResumeNotFoundError, apply_resume_updates, get_resume, list_resumes
+from app.database import get_session
 from app.models.resume import Resume
 
 
@@ -76,8 +76,12 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
             application = _apply_search_replace(resume.latex_source, search, replace)
-            resume.latex_source = application.updated_latex
-            await session.commit()
+            await apply_resume_updates(
+                session,
+                user_id,
+                parsed_resume_id,
+                latex_source=application.updated_latex,
+            )
 
         return application.result
 
@@ -100,8 +104,12 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
             application = _apply_insert_content(resume.latex_source, after, content)
-            resume.latex_source = application.updated_latex
-            await session.commit()
+            await apply_resume_updates(
+                session,
+                user_id,
+                parsed_resume_id,
+                latex_source=application.updated_latex,
+            )
 
         return application.result
 
@@ -122,8 +130,12 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
             application = _apply_delete_content(resume.latex_source, text)
-            resume.latex_source = application.updated_latex
-            await session.commit()
+            await apply_resume_updates(
+                session,
+                user_id,
+                parsed_resume_id,
+                latex_source=application.updated_latex,
+            )
 
         return application.result
 
@@ -163,8 +175,12 @@ def register_tools(mcp: FastMCP) -> None:
                 working_latex = application.updated_latex
                 applications.append(application)
 
-            resume.latex_source = working_latex
-            await session.commit()
+            await apply_resume_updates(
+                session,
+                user_id,
+                parsed_resume_id,
+                latex_source=working_latex,
+            )
 
         return _format_batch_success_result(applications)
 
@@ -233,8 +249,7 @@ def _apply_batch_operation(
         return _apply_delete_content(latex_source, text)
 
     raise ToolError(
-        f"Invalid operation type {operation_type!r}. Expected one of "
-        "'search_replace', 'insert', or 'delete'."
+        f"Invalid operation type {operation_type!r}. Expected one of 'search_replace', 'insert', or 'delete'."
     )
 
 
@@ -330,10 +345,7 @@ def _apply_delete_content(latex_source: str, text: str) -> _EditApplication:
             match.end,
             whitespace_adjusted=match.whitespace_adjusted,
         ),
-        summary=(
-            f"delete ({line_range}): "
-            f"{_format_match_result_prefix('Deleted 1 match', match.whitespace_adjusted)}"
-        ),
+        summary=(f"delete ({line_range}): {_format_match_result_prefix('Deleted 1 match', match.whitespace_adjusted)}"),
     )
 
 
@@ -371,8 +383,7 @@ def _find_unique_match(text: str, needle: str, *, not_found_message: str) -> _Ma
 
 def _find_match_spans(text: str, needle: str) -> list[_MatchSpan]:
     return [
-        _MatchSpan(start=match_start, end=match_start + len(needle))
-        for match_start in _find_match_starts(text, needle)
+        _MatchSpan(start=match_start, end=match_start + len(needle)) for match_start in _find_match_starts(text, needle)
     ]
 
 
@@ -597,10 +608,7 @@ def _format_compile_error_result(detail: Any) -> str:
             if key not in {"success", "message", "log", "detail"} and value is not None
         }
         if remaining:
-            parts.append(
-                "Additional details:\n"
-                f"{json.dumps(remaining, ensure_ascii=False, indent=2, sort_keys=True)}"
-            )
+            parts.append(f"Additional details:\n{json.dumps(remaining, ensure_ascii=False, indent=2, sort_keys=True)}")
 
         if len(parts) == 1:
             parts.append(_stringify_compile_detail(detail))
@@ -638,8 +646,7 @@ def _format_context_with_line_numbers(
     snippet_start_line = max(1, start_line - context_lines)
     snippet_end_line = min(total_lines, end_line + context_lines)
     snippet = "\n".join(
-        f"{line_number}\t{lines[line_number - 1]}"
-        for line_number in range(snippet_start_line, snippet_end_line + 1)
+        f"{line_number}\t{lines[line_number - 1]}" for line_number in range(snippet_start_line, snippet_end_line + 1)
     )
 
     return _format_line_range(text, start_index, end_index), snippet

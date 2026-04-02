@@ -1,9 +1,9 @@
 from app.mcp.auth_middleware import BearerAuthHTTPMiddleware, LogtoAuthMiddleware
-from app.mcp.db import dispose_engine, get_session
+from app.mcp.server import create_mcp_http_app, create_mcp_server
 
 __all__ = [
     "BearerAuthHTTPMiddleware",
     "LogtoAuthMiddleware",
-    "dispose_engine",
-    "get_session",
+    "create_mcp_http_app",
+    "create_mcp_server",
 ]

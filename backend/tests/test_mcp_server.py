@@ -19,9 +19,9 @@ from starlette.routing import Route
 from app.core.auth import AuthError
 from app.core.compile import CompileError, CompileServiceUnavailable
 from app.mcp.auth_middleware import BearerAuthHTTPMiddleware, LogtoAuthMiddleware
+from app.mcp.server import create_mcp_server
 from app.mcp.tools import register_tools
 from app.models.resume import Resume
-from mcp_server import create_mcp_server
 
 
 class _FakeFastMCPContext:
@@ -240,12 +240,7 @@ async def test_read_resume_returns_latex_with_line_numbers(
 
     result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
 
-    assert result == (
-        "1\t\\documentclass{article}\n"
-        "2\t\\begin{document}\n"
-        "3\tHello\n"
-        "4\t\\end{document}"
-    )
+    assert result == ("1\t\\documentclass{article}\n2\t\\begin{document}\n3\tHello\n4\t\\end{document}")
 
 
 @pytest.mark.asyncio
@@ -373,6 +368,53 @@ async def test_search_replace_updates_owned_resume_and_returns_context(
 
     assert saved_resume is not None
     assert saved_resume.latex_source == (
+        "\\documentclass{article}\n\\begin{document}\nSenior role title\n\\end{document}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_replace_uses_shared_update_service(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+    original_latex = "\\documentclass{article}\n\\begin{document}\nOld role title\n\\end{document}"
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=original_latex,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    update_mock = AsyncMock()
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+    monkeypatch.setattr("app.mcp.tools.apply_resume_updates", update_mock)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool("search_replace")
+    assert tool is not None
+
+    await tool.fn(
+        resume_id=str(resume_id),
+        search="Old role title",
+        replace="Senior role title",
+        ctx=_FakeToolContext("test-user"),
+    )
+
+    update_mock.assert_awaited_once()
+    assert update_mock.await_args.kwargs["latex_source"] == (
         "\\documentclass{article}\n\\begin{document}\nSenior role title\n\\end{document}"
     )
 
@@ -703,11 +745,7 @@ async def test_insert_content_updates_owned_resume_and_returns_context(
     session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     resume_id = uuid.uuid4()
     original_latex = (
-        "\\documentclass{article}\n"
-        "\\begin{document}\n"
-        "\\section*{Experience}\n"
-        "Existing entry\n"
-        "\\end{document}"
+        "\\documentclass{article}\n\\begin{document}\n\\section*{Experience}\nExisting entry\n\\end{document}"
     )
 
     async with session_factory() as session:
@@ -774,13 +812,7 @@ async def test_insert_content_falls_back_for_blank_line_mismatch(
     session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     resume_id = uuid.uuid4()
     original_latex = (
-        "\\documentclass{article}\n"
-        "\\begin{document}\n"
-        "\\section*{Experience}\n"
-        "\n"
-        "\n"
-        "Existing entry\n"
-        "\\end{document}"
+        "\\documentclass{article}\n\\begin{document}\n\\section*{Experience}\n\n\nExisting entry\n\\end{document}"
     )
 
     async with session_factory() as session:
@@ -1032,13 +1064,7 @@ async def test_delete_content_updates_owned_resume_and_returns_context(
 ) -> None:
     session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     resume_id = uuid.uuid4()
-    original_latex = (
-        "\\documentclass{article}\n"
-        "\\begin{document}\n"
-        "Old role\n"
-        "Remaining role\n"
-        "\\end{document}"
-    )
+    original_latex = "\\documentclass{article}\n\\begin{document}\nOld role\nRemaining role\n\\end{document}"
 
     async with session_factory() as session:
         session.add(
@@ -1085,12 +1111,7 @@ async def test_delete_content_updates_owned_resume_and_returns_context(
         saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
 
     assert saved_resume is not None
-    assert saved_resume.latex_source == (
-        "\\documentclass{article}\n"
-        "\\begin{document}\n"
-        "Remaining role\n"
-        "\\end{document}"
-    )
+    assert saved_resume.latex_source == ("\\documentclass{article}\n\\begin{document}\nRemaining role\n\\end{document}")
 
 
 @pytest.mark.asyncio
@@ -1673,12 +1694,7 @@ async def test_compile_resume_returns_readable_feedback_for_latex_errors(
 
     result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
 
-    assert result == (
-        "Compilation failed.\n"
-        "Message: ! Undefined control sequence.\n"
-        "Log:\n"
-        "l.3 \\\\badcommand"
-    )
+    assert result == ("Compilation failed.\nMessage: ! Undefined control sequence.\nLog:\nl.3 \\\\badcommand")
     compile_mock.assert_awaited_once_with(latex_source)
 
 

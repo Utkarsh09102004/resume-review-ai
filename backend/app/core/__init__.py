@@ -1,10 +1,11 @@
 from app.core.auth import AuthError, validate_token
-from app.core.compile import CompileError, CompileServiceUnavailable, compile_latex
+from app.core.compile import CompileError, CompileResult, CompileServiceUnavailable, compile_latex
 from app.core.resume_ops import ResumeNotFoundError, apply_resume_updates, get_resume, list_resumes
 
 __all__ = [
     "AuthError",
     "CompileError",
+    "CompileResult",
     "CompileServiceUnavailable",
     "ResumeNotFoundError",
     "apply_resume_updates",

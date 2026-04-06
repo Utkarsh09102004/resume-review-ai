@@ -17,8 +17,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from app.core.auth import AuthError
-from app.core.compile import CompileError, CompileServiceUnavailable
-from app.mcp.auth_middleware import BearerAuthHTTPMiddleware, LogtoAuthMiddleware
+from app.core.compile import CompileError, CompileResult, CompileServiceUnavailable
+from app.core.resume_ops import ResumeVersionConflictError
+from app.mcp.auth_middleware import BearerAuthHTTPMiddleware, DevUserMiddleware, LogtoAuthMiddleware
 from app.mcp.server import create_mcp_server
 from app.mcp.tools import register_tools
 from app.models.resume import Resume
@@ -34,16 +35,70 @@ class _FakeFastMCPContext:
 
 
 class _FakeToolContext:
-    def __init__(self, user_id: str | None) -> None:
-        self.user_id = user_id
+    def __init__(self, user_id: str | None, state: dict[str, Any] | None = None) -> None:
+        self.state = dict(state or {})
+        if user_id is not None:
+            self.state["user_id"] = user_id
 
-    async def get_state(self, key: str) -> str | None:
-        assert key == "user_id"
-        return self.user_id
+    async def get_state(self, key: str) -> Any:
+        return self.state.get(key)
+
+    async def set_state(self, key: str, value: Any, *, serializable: bool = True) -> None:
+        assert serializable is True
+        self.state[key] = value
+
+
+def _tool_context_for_resume(user_id: str, resume_id: uuid.UUID, *, version: int = 1) -> _FakeToolContext:
+    return _FakeToolContext(
+        user_id,
+        state={"resume_versions": {str(resume_id): version}},
+    )
 
 
 async def _ok_endpoint(_request) -> JSONResponse:
     return JSONResponse({"ok": True})
+
+
+def _edit_tool_args(tool_name: str, resume_id: uuid.UUID) -> dict[str, Any]:
+    if tool_name == "search_replace":
+        return {
+            "resume_id": str(resume_id),
+            "search": "Old role title",
+            "replace": "Senior role title",
+        }
+    if tool_name == "insert_content":
+        return {
+            "resume_id": str(resume_id),
+            "after": "\\section*{Experience}",
+            "content": "\\textbf{New role}",
+        }
+    if tool_name == "delete_content":
+        return {
+            "resume_id": str(resume_id),
+            "text": "Old role\n",
+        }
+    if tool_name == "batch_edit":
+        return {
+            "resume_id": str(resume_id),
+            "operations": [
+                {
+                    "type": "search_replace",
+                    "search": "Old role title",
+                    "replace": "Senior role title",
+                }
+            ],
+        }
+    raise AssertionError(f"Unexpected tool name: {tool_name}")
+
+
+def _edit_tool_latex(tool_name: str) -> str:
+    if tool_name in {"search_replace", "batch_edit"}:
+        return "\\documentclass{article}\n\\begin{document}\nOld role title\n\\end{document}"
+    if tool_name == "insert_content":
+        return "\\documentclass{article}\n\\begin{document}\n\\section*{Experience}\nExisting entry\n\\end{document}"
+    if tool_name == "delete_content":
+        return "\\documentclass{article}\n\\begin{document}\nOld role\nRemaining role\n\\end{document}"
+    raise AssertionError(f"Unexpected tool name: {tool_name}")
 
 
 @pytest.mark.asyncio
@@ -121,6 +176,25 @@ async def test_fastmcp_middleware_sets_user_id_state(
 
     assert result == {"ok": True}
     assert fastmcp_context.state == {"user_id": "user-123"}
+    call_next.assert_awaited_once_with(context)
+
+
+@pytest.mark.asyncio
+async def test_dev_user_middleware_sets_dev_user_state() -> None:
+    fastmcp_context = _FakeFastMCPContext()
+    middleware = DevUserMiddleware()
+    call_next = AsyncMock(return_value={"ok": True})
+    context = MiddlewareContext(
+        message={"jsonrpc": "2.0", "method": "initialize"},
+        fastmcp_context=fastmcp_context,
+        method="initialize",
+        type="request",
+    )
+
+    result = await middleware.on_request(context, call_next)
+
+    assert result == {"ok": True}
+    assert fastmcp_context.state == {"user_id": "dev-user"}
     call_next.assert_awaited_once_with(context)
 
 
@@ -237,10 +311,12 @@ async def test_read_resume_returns_latex_with_line_numbers(
     register_tools(mcp)
     tool = await mcp.get_tool("read_resume")
     assert tool is not None
+    ctx = _FakeToolContext("test-user")
 
-    result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
+    result = await tool.fn(resume_id=str(resume_id), ctx=ctx)
 
     assert result == ("1\t\\documentclass{article}\n2\t\\begin{document}\n3\tHello\n4\t\\end{document}")
+    assert ctx.state["resume_versions"] == {str(resume_id): 1}
 
 
 @pytest.mark.asyncio
@@ -343,12 +419,13 @@ async def test_search_replace_updates_owned_resume_and_returns_context(
     register_tools(mcp)
     tool = await mcp.get_tool("search_replace")
     assert tool is not None
+    ctx = _tool_context_for_resume("test-user", resume_id)
 
     result = await tool.fn(
         resume_id=str(resume_id),
         search="Old role title",
         replace="Senior role title",
-        ctx=_FakeToolContext("test-user"),
+        ctx=ctx,
     )
 
     assert result == (
@@ -370,6 +447,7 @@ async def test_search_replace_updates_owned_resume_and_returns_context(
     assert saved_resume.latex_source == (
         "\\documentclass{article}\n\\begin{document}\nSenior role title\n\\end{document}"
     )
+    assert ctx.state["resume_versions"] == {str(resume_id): 2}
 
 
 @pytest.mark.asyncio
@@ -397,7 +475,15 @@ async def test_search_replace_uses_shared_update_service(
         async with session_factory() as session:
             yield session
 
-    update_mock = AsyncMock()
+    update_mock = AsyncMock(
+        return_value=Resume(
+            id=resume_id,
+            user_id="test-user",
+            title="Resume",
+            latex_source="\\documentclass{article}\n\\begin{document}\nSenior role title\n\\end{document}",
+            version=2,
+        )
+    )
     monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
     monkeypatch.setattr("app.mcp.tools.apply_resume_updates", update_mock)
 
@@ -410,7 +496,7 @@ async def test_search_replace_uses_shared_update_service(
         resume_id=str(resume_id),
         search="Old role title",
         replace="Senior role title",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     update_mock.assert_awaited_once()
@@ -455,7 +541,7 @@ async def test_search_replace_falls_back_for_trailing_whitespace_mismatch(
         resume_id=str(resume_id),
         search="Old role title\n",
         replace="Senior role title\n",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result == (
@@ -547,7 +633,7 @@ async def test_search_replace_rejects_missing_text(
             resume_id=str(resume_id),
             search="missing",
             replace="new",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -587,7 +673,7 @@ async def test_search_replace_falls_back_for_mixed_whitespace_mismatch(
         resume_id=str(resume_id),
         search="Start\n\nTabbed line\nEnd",
         replace="Start\n\nNormalized line\nEnd",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result.startswith("Replaced 1 match (whitespace-adjusted).\n")
@@ -635,7 +721,7 @@ async def test_search_replace_rejects_ambiguous_match(
             resume_id=str(resume_id),
             search="duplicate",
             replace="unique",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     assert str(exc_info.value) == (
@@ -686,7 +772,7 @@ async def test_search_replace_rejects_ambiguous_normalized_match(
             resume_id=str(resume_id),
             search="duplicate\n\nvalue",
             replace="unique",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     message = str(exc_info.value)
@@ -733,7 +819,7 @@ async def test_search_replace_rejects_other_users_resume(
             resume_id=str(resume_id),
             search="secret",
             replace="shared",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -775,7 +861,7 @@ async def test_insert_content_updates_owned_resume_and_returns_context(
         resume_id=str(resume_id),
         after="\\section*{Experience}",
         content="\\textbf{New role}",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result == (
@@ -842,7 +928,7 @@ async def test_insert_content_falls_back_for_blank_line_mismatch(
         resume_id=str(resume_id),
         after="\\section*{Experience}\n\nExisting entry",
         content="\\item New project",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result.startswith("Inserted content after 1 match (whitespace-adjusted).\n")
@@ -926,7 +1012,7 @@ async def test_insert_content_rejects_missing_anchor(
             resume_id=str(resume_id),
             after="\\section*{Projects}",
             content="\\item New project",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -969,7 +1055,7 @@ async def test_insert_content_does_not_ignore_leading_indentation(
             resume_id=str(resume_id),
             after="\\begin{itemize}\n\\item Existing project",
             content="\\item New project",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -1009,7 +1095,7 @@ async def test_insert_content_rejects_ambiguous_anchor(
             resume_id=str(resume_id),
             after="duplicate",
             content="unique",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     assert "Found 2 matches. Include more surrounding context to target a specific one." in str(exc_info.value)
@@ -1053,7 +1139,7 @@ async def test_insert_content_rejects_other_users_resume(
             resume_id=str(resume_id),
             after="secret",
             content="shared",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -1092,7 +1178,7 @@ async def test_delete_content_updates_owned_resume_and_returns_context(
     result = await tool.fn(
         resume_id=str(resume_id),
         text="Old role\n",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result == (
@@ -1149,7 +1235,7 @@ async def test_delete_content_falls_back_for_crlf_mismatch(
     result = await tool.fn(
         resume_id=str(resume_id),
         text="Delete me\n",
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result.startswith("Deleted 1 match (whitespace-adjusted).\n")
@@ -1211,7 +1297,7 @@ async def test_delete_content_rejects_missing_text(
         await tool.fn(
             resume_id=str(resume_id),
             text="missing",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -1250,7 +1336,7 @@ async def test_delete_content_rejects_ambiguous_match(
         await tool.fn(
             resume_id=str(resume_id),
             text="duplicate",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     assert str(exc_info.value) == (
@@ -1302,7 +1388,7 @@ async def test_search_replace_caps_ambiguous_match_context_at_five_results(
             resume_id=str(resume_id),
             search="duplicate",
             replace="unique",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     message = str(exc_info.value)
@@ -1349,7 +1435,7 @@ async def test_search_replace_lists_all_ambiguous_match_locations_when_under_cap
             resume_id=str(resume_id),
             search="duplicate",
             replace="unique",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     assert str(exc_info.value) == (
@@ -1404,7 +1490,7 @@ async def test_delete_content_rejects_other_users_resume(
         await tool.fn(
             resume_id=str(resume_id),
             text="secret",
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
 
@@ -1467,7 +1553,7 @@ async def test_batch_edit_applies_mixed_operations_sequentially(
                 "text": "Legacy skill\n",
             },
         ],
-        ctx=_FakeToolContext("test-user"),
+        ctx=_tool_context_for_resume("test-user", resume_id),
     )
 
     assert result == (
@@ -1539,7 +1625,7 @@ async def test_batch_edit_rolls_back_all_changes_when_a_later_operation_fails(
                     "text": "repeat",
                 },
             ],
-            ctx=_FakeToolContext("test-user"),
+            ctx=_tool_context_for_resume("test-user", resume_id),
         )
 
     assert str(exc_info.value) == (
@@ -1610,6 +1696,143 @@ async def test_batch_edit_returns_without_saving_when_operations_are_empty(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name",
+    ["search_replace", "insert_content", "delete_content", "batch_edit"],
+)
+async def test_edit_tools_require_read_before_editing(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=_edit_tool_latex(tool_name),
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool(tool_name)
+    assert tool is not None
+
+    with pytest.raises(ToolError, match=r"Call read_resume before editing this resume\."):
+        await tool.fn(**_edit_tool_args(tool_name, resume_id), ctx=_FakeToolContext("test-user"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name",
+    ["search_replace", "insert_content", "delete_content", "batch_edit"],
+)
+async def test_edit_tools_reject_stale_last_read_version(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=_edit_tool_latex(tool_name),
+                version=2,
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool(tool_name)
+    assert tool is not None
+
+    with pytest.raises(ToolError, match=r"Resume changed since your last read; call read_resume again\."):
+        await tool.fn(
+            **_edit_tool_args(tool_name, resume_id),
+            ctx=_tool_context_for_resume("test-user", resume_id, version=1),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name",
+    ["search_replace", "insert_content", "delete_content", "batch_edit"],
+)
+async def test_edit_tools_return_reread_message_when_final_save_conflicts(
+    test_engine,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+) -> None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    resume_id = uuid.uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id="test-user",
+                title="Resume",
+                latex_source=_edit_tool_latex(tool_name),
+            )
+        )
+        await session.commit()
+
+    @asynccontextmanager
+    async def get_test_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
+    monkeypatch.setattr(
+        "app.mcp.tools.apply_resume_updates",
+        AsyncMock(side_effect=ResumeVersionConflictError()),
+    )
+
+    mcp = FastMCP("test")
+    register_tools(mcp)
+    tool = await mcp.get_tool(tool_name)
+    assert tool is not None
+
+    with pytest.raises(ToolError, match=r"Resume changed since your last read; call read_resume again\."):
+        await tool.fn(
+            **_edit_tool_args(tool_name, resume_id),
+            ctx=_tool_context_for_resume("test-user", resume_id),
+        )
+
+    async with session_factory() as session:
+        saved_resume = await session.scalar(select(Resume).where(Resume.id == resume_id))
+
+    assert saved_resume is not None
+    assert saved_resume.latex_source == _edit_tool_latex(tool_name)
+
+
+@pytest.mark.asyncio
 async def test_compile_resume_returns_success_for_valid_latex(
     test_engine,
     monkeypatch: pytest.MonkeyPatch,
@@ -1635,7 +1858,7 @@ async def test_compile_resume_returns_success_for_valid_latex(
             yield session
 
     monkeypatch.setattr("app.mcp.tools.get_session", get_test_session)
-    compile_mock = AsyncMock(return_value=b"%PDF-1.4 fake")
+    compile_mock = AsyncMock(return_value=CompileResult(pdf=b"%PDF-1.4 fake", pages=1))
     monkeypatch.setattr("app.mcp.tools.compile_latex", compile_mock)
 
     mcp = FastMCP("test")
@@ -1645,7 +1868,7 @@ async def test_compile_resume_returns_success_for_valid_latex(
 
     result = await tool.fn(resume_id=str(resume_id), ctx=_FakeToolContext("test-user"))
 
-    assert result == "Compilation successful. Resume compiles without errors."
+    assert result == "Compilation successful. Resume compiles without errors. Pages: 1."
     compile_mock.assert_awaited_once_with(latex_source)
 
 

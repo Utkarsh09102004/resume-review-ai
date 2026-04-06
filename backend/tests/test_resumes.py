@@ -195,6 +195,7 @@ async def test_get_resume(client: AsyncClient) -> None:
     data = resp.json()
     assert data["title"] == "Fetch Me"
     assert data["id"] == resume_id
+    assert "version" not in data
 
 
 @pytest.mark.asyncio
@@ -245,6 +246,7 @@ async def test_update_resume(client: AsyncClient) -> None:
     resp = await client.put(f"/api/resumes/{resume_id}", json={"title": "New Title"})
     assert resp.status_code == 200
     assert resp.json()["title"] == "New Title"
+    assert "version" not in resp.json()
 
 
 @pytest.mark.asyncio

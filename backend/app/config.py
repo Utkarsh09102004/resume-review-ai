@@ -13,8 +13,9 @@ class Settings(BaseSettings):
     LOGTO_JWKS_URL: str = ""
     LOGTO_APP_ID: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
+    MCP_BASE_URL: str = "http://localhost:8000/mcp"
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context: Any) -> None:
         super().model_post_init(__context)

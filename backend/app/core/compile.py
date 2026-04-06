@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 
@@ -17,7 +17,12 @@ class CompileServiceUnavailable(CompileError):
         super().__init__(503, "LaTeX compilation service unavailable")
 
 
-async def compile_latex(latex_source: str) -> bytes:
+class CompileResult(NamedTuple):
+    pdf: bytes
+    pages: int | None
+
+
+async def compile_latex(latex_source: str) -> CompileResult:
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
@@ -28,7 +33,9 @@ async def compile_latex(latex_source: str) -> bytes:
         raise CompileServiceUnavailable() from err
 
     if resp.status_code == 200 and "application/pdf" in resp.headers.get("content-type", ""):
-        return resp.content
+        raw_pages = resp.headers.get("x-pdf-pages")
+        pages = int(raw_pages) if raw_pages is not None else None
+        return CompileResult(pdf=resp.content, pages=pages)
 
     try:
         error_body: Any = resp.json()

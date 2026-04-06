@@ -20,7 +20,26 @@ async def test_compile_success() -> None:
         )
     )
 
-    assert await compile_latex(r"\documentclass{article}\begin{document}Hi\end{document}") == pdf_bytes
+    result = await compile_latex(r"\documentclass{article}\begin{document}Hi\end{document}")
+    assert result.pdf == pdf_bytes
+    assert result.pages is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_compile_success_with_page_count() -> None:
+    pdf_bytes = b"%PDF-1.4 fake pdf content"
+    respx.post(TEXLIVE_COMPILE_URL).mock(
+        return_value=httpx.Response(
+            200,
+            content=pdf_bytes,
+            headers={"content-type": "application/pdf", "x-pdf-pages": "2"},
+        )
+    )
+
+    result = await compile_latex(r"\documentclass{article}\begin{document}Hi\end{document}")
+    assert result.pdf == pdf_bytes
+    assert result.pages == 2
 
 
 @pytest.mark.asyncio

@@ -158,11 +158,14 @@ function LoadedPreviewPanel({
 
       const containerWidth = containerRef.current?.clientWidth ?? 600;
       const viewport = page.getViewport({ scale: 1 });
-      const scale = Math.min((containerWidth - 48) / viewport.width, 2);
-      const scaledViewport = page.getViewport({ scale });
+      const cssScale = Math.min((containerWidth - 48) / viewport.width, 2);
+      const dpr = window.devicePixelRatio || 1;
+      const scaledViewport = page.getViewport({ scale: cssScale * dpr });
 
       canvas.height = scaledViewport.height;
       canvas.width = scaledViewport.width;
+      canvas.style.width = `${scaledViewport.width / dpr}px`;
+      canvas.style.height = `${scaledViewport.height / dpr}px`;
 
       renderTask = page.render({
         canvas,

@@ -1,6 +1,6 @@
 import json
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,7 +9,13 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import CurrentContext
 
 from app.core.compile import CompileError, CompileServiceUnavailable, compile_latex
-from app.core.resume_ops import ResumeNotFoundError, apply_resume_updates, get_resume, list_resumes
+from app.core.resume_ops import (
+    ResumeNotFoundError,
+    ResumeVersionConflictError,
+    apply_resume_updates,
+    get_resume,
+    list_resumes,
+)
 from app.database import get_session
 from app.models.resume import Resume
 
@@ -35,6 +41,11 @@ class _EditApplication:
     summary: str
 
 
+_RESUME_VERSIONS_STATE_KEY = "resume_versions"
+_READ_BEFORE_EDITING_ERROR = "Call read_resume before editing this resume."
+_STALE_RESUME_ERROR = "Resume changed since your last read; call read_resume again."
+
+
 def register_tools(mcp: FastMCP) -> None:
     @mcp.tool
     async def list_user_resumes(ctx: Context = CurrentContext()) -> str:
@@ -56,6 +67,7 @@ def register_tools(mcp: FastMCP) -> None:
             except ResumeNotFoundError as err:
                 raise ToolError(err.detail) from err
 
+        await _store_last_read_resume_version(ctx, parsed_resume_id, resume.version)
         return _format_latex_with_line_numbers(resume.latex_source)
 
     @mcp.tool
@@ -70,17 +82,12 @@ def register_tools(mcp: FastMCP) -> None:
         _validate_search_text(search)
 
         async with get_session() as session:
-            try:
-                resume = await get_resume(session, user_id, parsed_resume_id)
-            except ResumeNotFoundError as err:
-                raise ToolError(err.detail) from err
-
-            application = _apply_search_replace(resume.latex_source, search, replace)
-            await apply_resume_updates(
+            application = await _apply_versioned_edit(
+                ctx,
                 session,
                 user_id,
                 parsed_resume_id,
-                latex_source=application.updated_latex,
+                lambda latex_source: _apply_search_replace(latex_source, search, replace),
             )
 
         return application.result
@@ -98,17 +105,12 @@ def register_tools(mcp: FastMCP) -> None:
         _validate_non_empty_text(content, "content")
 
         async with get_session() as session:
-            try:
-                resume = await get_resume(session, user_id, parsed_resume_id)
-            except ResumeNotFoundError as err:
-                raise ToolError(err.detail) from err
-
-            application = _apply_insert_content(resume.latex_source, after, content)
-            await apply_resume_updates(
+            application = await _apply_versioned_edit(
+                ctx,
                 session,
                 user_id,
                 parsed_resume_id,
-                latex_source=application.updated_latex,
+                lambda latex_source: _apply_insert_content(latex_source, after, content),
             )
 
         return application.result
@@ -124,17 +126,12 @@ def register_tools(mcp: FastMCP) -> None:
         _validate_non_empty_text(text, "text")
 
         async with get_session() as session:
-            try:
-                resume = await get_resume(session, user_id, parsed_resume_id)
-            except ResumeNotFoundError as err:
-                raise ToolError(err.detail) from err
-
-            application = _apply_delete_content(resume.latex_source, text)
-            await apply_resume_updates(
+            application = await _apply_versioned_edit(
+                ctx,
                 session,
                 user_id,
                 parsed_resume_id,
-                latex_source=application.updated_latex,
+                lambda latex_source: _apply_delete_content(latex_source, text),
             )
 
         return application.result
@@ -149,37 +146,19 @@ def register_tools(mcp: FastMCP) -> None:
         parsed_resume_id = _parse_uuid(resume_id)
 
         async with get_session() as session:
-            try:
-                resume = await get_resume(session, user_id, parsed_resume_id)
-            except ResumeNotFoundError as err:
-                raise ToolError(err.detail) from err
-
             if not operations:
+                try:
+                    await get_resume(session, user_id, parsed_resume_id)
+                except ResumeNotFoundError as err:
+                    raise ToolError(err.detail) from err
                 return "No operations to apply."
 
-            working_latex = resume.latex_source
-            applications: list[_EditApplication] = []
-
-            for operation_index, operation in enumerate(operations, start=1):
-                try:
-                    application = _apply_batch_operation(working_latex, operation)
-                except ToolError as err:
-                    raise ToolError(
-                        _format_batch_failure_result(
-                            operation_index,
-                            str(err),
-                            completed_count=len(applications),
-                        )
-                    ) from err
-
-                working_latex = application.updated_latex
-                applications.append(application)
-
-            await apply_resume_updates(
+            applications = await _apply_versioned_batch_edit(
+                ctx,
                 session,
                 user_id,
                 parsed_resume_id,
-                latex_source=working_latex,
+                operations,
             )
 
         return _format_batch_success_result(applications)
@@ -196,13 +175,16 @@ def register_tools(mcp: FastMCP) -> None:
                 raise ToolError(err.detail) from err
 
         try:
-            await compile_latex(resume.latex_source)
+            result = await compile_latex(resume.latex_source)
         except CompileServiceUnavailable as err:
             raise ToolError("Compilation service is currently unavailable. Try again later.") from err
         except CompileError as err:
             return _format_compile_error_result(err.detail)
 
-        return "Compilation successful. Resume compiles without errors."
+        msg = "Compilation successful. Resume compiles without errors."
+        if result.pages is not None:
+            msg += f" Pages: {result.pages}."
+        return msg
 
 
 async def _require_user_id(ctx: Context) -> str:
@@ -210,6 +192,105 @@ async def _require_user_id(ctx: Context) -> str:
     if not isinstance(user_id, str) or not user_id:
         raise ToolError("Authentication context missing user_id")
     return user_id
+
+
+async def _get_resume_versions(ctx: Context) -> dict[str, int]:
+    resume_versions = await ctx.get_state(_RESUME_VERSIONS_STATE_KEY)
+    if not isinstance(resume_versions, dict):
+        return {}
+
+    return {
+        resume_id: version
+        for resume_id, version in resume_versions.items()
+        if isinstance(resume_id, str) and isinstance(version, int)
+    }
+
+
+async def _store_last_read_resume_version(ctx: Context, resume_id: uuid.UUID, version: int) -> None:
+    resume_versions = await _get_resume_versions(ctx)
+    resume_versions[str(resume_id)] = version
+    await ctx.set_state(_RESUME_VERSIONS_STATE_KEY, resume_versions)
+
+
+async def _load_resume_for_edit(
+    ctx: Context,
+    session: Any,
+    user_id: str,
+    resume_id: uuid.UUID,
+) -> Resume:
+    try:
+        resume = await get_resume(session, user_id, resume_id)
+    except ResumeNotFoundError as err:
+        raise ToolError(err.detail) from err
+
+    resume_versions = await _get_resume_versions(ctx)
+    last_read_version = resume_versions.get(str(resume_id))
+    if last_read_version is None:
+        raise ToolError(_READ_BEFORE_EDITING_ERROR)
+    if last_read_version != resume.version:
+        raise ToolError(_STALE_RESUME_ERROR)
+
+    return resume
+
+
+async def _apply_versioned_edit(
+    ctx: Context,
+    session: Any,
+    user_id: str,
+    resume_id: uuid.UUID,
+    apply_edit: Callable[[str], _EditApplication],
+) -> _EditApplication:
+    resume = await _load_resume_for_edit(ctx, session, user_id, resume_id)
+    application = apply_edit(resume.latex_source)
+
+    try:
+        updated_resume = await apply_resume_updates(
+            session,
+            user_id,
+            resume_id,
+            latex_source=application.updated_latex,
+            expected_version=resume.version,
+        )
+    except ResumeVersionConflictError as err:
+        raise ToolError(_STALE_RESUME_ERROR) from err
+
+    updated_version = getattr(updated_resume, "version", None)
+    await _store_last_read_resume_version(
+        ctx,
+        resume_id,
+        updated_version if isinstance(updated_version, int) else resume.version + 1,
+    )
+    return application
+
+
+async def _apply_versioned_batch_edit(
+    ctx: Context,
+    session: Any,
+    user_id: str,
+    resume_id: uuid.UUID,
+    operations: list[dict[str, Any]],
+) -> list[_EditApplication]:
+    resume = await _load_resume_for_edit(ctx, session, user_id, resume_id)
+    updated_latex, applications = _apply_batch_operations(resume.latex_source, operations)
+
+    try:
+        updated_resume = await apply_resume_updates(
+            session,
+            user_id,
+            resume_id,
+            latex_source=updated_latex,
+            expected_version=resume.version,
+        )
+    except ResumeVersionConflictError as err:
+        raise ToolError(_STALE_RESUME_ERROR) from err
+
+    updated_version = getattr(updated_resume, "version", None)
+    await _store_last_read_resume_version(
+        ctx,
+        resume_id,
+        updated_version if isinstance(updated_version, int) else resume.version + 1,
+    )
+    return applications
 
 
 def _parse_uuid(value: str) -> uuid.UUID:
@@ -226,6 +307,31 @@ def _validate_search_text(search: str) -> None:
 def _validate_non_empty_text(value: str, field_name: str) -> None:
     if not value:
         raise ToolError(f"Invalid {field_name}: must be a non-empty string")
+
+
+def _apply_batch_operations(
+    latex_source: str,
+    operations: list[dict[str, Any]],
+) -> tuple[str, list[_EditApplication]]:
+    working_latex = latex_source
+    applications: list[_EditApplication] = []
+
+    for operation_index, operation in enumerate(operations, start=1):
+        try:
+            application = _apply_batch_operation(working_latex, operation)
+        except ToolError as err:
+            raise ToolError(
+                _format_batch_failure_result(
+                    operation_index,
+                    str(err),
+                    completed_count=len(applications),
+                )
+            ) from err
+
+        working_latex = application.updated_latex
+        applications.append(application)
+
+    return working_latex, applications
 
 
 def _apply_batch_operation(

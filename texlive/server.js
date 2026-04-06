@@ -10,6 +10,8 @@ app.use(express.json({ limit: "5mb" }));
 const COMPILE_DIR = "/tmp/latex-compile";
 const TIMEOUT_MS = 15000;
 
+const LATEX_ENGINE = "pdflatex";
+
 app.post("/compile", async (req, res) => {
   const start = Date.now();
   const { latex } = req.body;
@@ -29,9 +31,14 @@ app.post("/compile", async (req, res) => {
     const texFile = path.join(jobDir, "input.tex");
     await fs.promises.writeFile(texFile, latex);
 
-    // Run xelatex twice for references/TOC
+    // Run pdflatex twice for references/TOC
+    let lastOutput = "";
+    const pdfFile = path.join(jobDir, "input.pdf");
     for (let pass = 0; pass < 2; pass++) {
-      const result = await runXelatex(jobDir, texFile);
+      // Remove stale PDF so the existence check reflects this pass's output
+      await fs.promises.rm(pdfFile, { force: true });
+      const result = await runLatex(jobDir, texFile);
+      lastOutput = result.output;
       if (!result.success) {
         const duration = Date.now() - start;
         const errorMessage = parseLatexError(result.output) || result.message;
@@ -60,7 +67,11 @@ app.post("/compile", async (req, res) => {
     const duration = Date.now() - start;
     logCompilation({ duration_ms: duration, success: true });
 
+    const pageCount = parsePageCount(lastOutput);
     res.setHeader("Content-Type", "application/pdf");
+    if (pageCount !== null) {
+      res.setHeader("X-PDF-Pages", String(pageCount));
+    }
     res.send(pdfBytes);
   } catch (err) {
     const duration = Date.now() - start;
@@ -77,38 +88,57 @@ app.post("/compile", async (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  execFile("xelatex", ["--version"], { timeout: 5000 }, (err, stdout) => {
+  execFile(LATEX_ENGINE, ["--version"], { timeout: 5000 }, (err, stdout) => {
     if (err) {
       return res.status(503).json({
         status: "error",
-        message: "xelatex not available",
+        message: `${LATEX_ENGINE} not available`,
       });
     }
     const version = stdout.split("\n")[0];
-    res.json({ status: "ok", engine: "xelatex", version });
+    res.json({ status: "ok", engine: LATEX_ENGINE, version });
   });
 });
 
-function runXelatex(cwd, texFile) {
+function runLatex(cwd, texFile) {
   return new Promise((resolve) => {
     execFile(
-      "xelatex",
-      ["--no-shell-escape", "--interaction=nonstopmode", texFile],
+      LATEX_ENGINE,
+      ["-no-shell-escape", "-interaction=nonstopmode", texFile],
       { cwd, timeout: TIMEOUT_MS },
       (err, stdout, stderr) => {
         const output = (stdout || "") + "\n" + (stderr || "");
-        if (err) {
-          resolve({
-            success: false,
-            message: err.killed ? "Compilation timed out" : "Compilation failed",
-            output,
-          });
-        } else {
-          resolve({ success: true, output });
+        if (err && err.killed) {
+          resolve({ success: false, message: "Compilation timed out", output });
+          return;
         }
+        // IMPORTANT: Do NOT revert this to a simple exit-code check.
+        // pdflatex exits non-zero on warnings/non-fatal errors (e.g. undefined
+        // commands like \medium) but still produces a valid PDF. This matches
+        // Overleaf's behavior — most resume templates from the internet have
+        // minor issues that don't prevent PDF generation.
+        // We use pdflatex (not xelatex) because virtually all Overleaf resume
+        // templates target pdflatex. xelatex breaks on common pdfTeX commands
+        // like \input{glyphtounicode} and \pdfgentounicode. pdflatex covers
+        // our use case fully.
+        const pdfPath = path.join(cwd, "input.pdf");
+        fs.access(pdfPath, fs.constants.F_OK, (accessErr) => {
+          if (!accessErr) {
+            resolve({ success: true, output });
+          } else {
+            resolve({ success: false, message: "Compilation failed", output });
+          }
+        });
       }
     );
   });
+}
+
+function parsePageCount(output) {
+  if (!output) return null;
+  // pdflatex prints: "Output written on input.pdf (2 pages, 13338 bytes)."
+  const match = output.match(/Output written on .+\((\d+) pages?,/);
+  return match ? parseInt(match[1], 10) : null;
 }
 
 function parseLatexError(output) {

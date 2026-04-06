@@ -3,7 +3,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.resume_ops import ResumeNotFoundError, apply_resume_updates, get_resume, list_resumes
+from app.core.resume_ops import (
+    ResumeNotFoundError,
+    ResumeVersionConflictError,
+    apply_resume_updates,
+    get_resume,
+    list_resumes,
+)
 from app.models.resume import Resume
 
 
@@ -107,7 +113,68 @@ async def test_apply_resume_updates(test_session) -> None:
 
     assert updated.title == "Updated Resume"
     assert updated.latex_source == "new source"
+    assert updated.version == 2
 
     saved = await get_resume(test_session, "test-user", resume_id)
     assert saved.title == "Updated Resume"
     assert saved.latex_source == "new source"
+    assert saved.version == 2
+
+
+@pytest.mark.asyncio
+async def test_apply_resume_updates_with_matching_expected_version(test_session) -> None:
+    resume_id = uuid.uuid4()
+    test_session.add(
+        Resume(
+            id=resume_id,
+            user_id="test-user",
+            title="Resume",
+            latex_source="old source",
+        )
+    )
+    await test_session.commit()
+
+    updated = await apply_resume_updates(
+        test_session,
+        "test-user",
+        resume_id,
+        latex_source="new source",
+        expected_version=1,
+    )
+
+    assert updated.latex_source == "new source"
+    assert updated.version == 2
+
+
+@pytest.mark.asyncio
+async def test_apply_resume_updates_rejects_stale_expected_version(test_session) -> None:
+    resume_id = uuid.uuid4()
+    test_session.add(
+        Resume(
+            id=resume_id,
+            user_id="test-user",
+            title="Resume",
+            latex_source="old source",
+        )
+    )
+    await test_session.commit()
+
+    await apply_resume_updates(
+        test_session,
+        "test-user",
+        resume_id,
+        latex_source="new source",
+    )
+
+    with pytest.raises(ResumeVersionConflictError, match="Resume version conflict"):
+        await apply_resume_updates(
+            test_session,
+            "test-user",
+            resume_id,
+            latex_source="stale source",
+            expected_version=1,
+        )
+
+    saved = await get_resume(test_session, "test-user", resume_id)
+    assert saved.latex_source == "new source"
+    assert saved.version == 2

@@ -44,6 +44,18 @@ class LogtoAuthMiddleware(Middleware):
         return await call_next(context)
 
 
+class DevUserMiddleware(Middleware):
+    async def on_request(
+        self,
+        context: MiddlewareContext[Any],
+        call_next: Any,
+    ) -> Any:
+        if context.fastmcp_context is not None:
+            await context.fastmcp_context.set_state("user_id", "dev-user")
+
+        return await call_next(context)
+
+
 class BearerAuthHTTPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:

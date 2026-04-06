@@ -21,9 +21,9 @@ class CompileRequest(BaseModel):
 @router.post("/api/compile")
 async def compile_latex(body: CompileRequest, _user_id: str = Depends(get_current_user)) -> Response:
     try:
-        pdf_bytes = await compile_latex_pdf(body.latex)
+        result = await compile_latex_pdf(body.latex)
         return Response(
-            content=pdf_bytes,
+            content=result.pdf,
             media_type="application/pdf",
         )
     except CompileServiceUnavailable as err:
